@@ -1777,13 +1777,14 @@ let rz = 0; window.addEventListener('resize', () => { clearTimeout(rz); rz = set
 // img = a still picture, demo = a clip played live by the game engine in an iframe (ar = its aspect ratio)
 const RULE_SLIDES = [
   { img: 'rules/r01.jpg', text: '黒と白が交互に工場を建てていきます。\nボード上の各点が建設候補地です。' },
-  { img: 'rules/r02.jpg', text: '縦横に隣接する自分の工場とは連結します。' },
   { img: 'rules/r03.jpg', text: '工場の四方には排気口があります。壁と相手工場に隣接する排気口は閉鎖されます。' },
+  { img: 'rules/r02.jpg', text: '縦横に隣接する自分の工場とは連結します。' },
+  { img: 'rules/r02b.jpg', text: '連結した工場同士は、排気口をシェアします。' },
   { demo: 'explode', ar: '1 / 1', text: '連結した工場の排気口がすべて塞がれると、爆発してしまいます。' },
-  { img: 'rules/r05.jpg', text: '排気口がすべて閉じてしまう場所には、工場を建てられません。' },
+  { img: 'rules/r05.jpg', text: '排気口が確保できない場所には、工場を建てられません。' },
   { demo: 'capture', ar: '1 / 1', text: 'ただし、建てた直後に相手工場が爆発するなら建てられます。\n（先に相手工場が吹き飛び、その後で自分の排気口が開きます。）' },
   { img: 'rules/r07.jpg', text: '連結された工場で1つの点を囲むと、排気口から煙突が出ます。\n1か所だけだと小さな煙突です（まだ無意味です）。' },
-  { demo: 'big', ar: '11 / 6', text: '煙突を2か所作ると大きな煙突になり、大型工場にアップグレードされます。\n（大型工場は絶対に爆発しません！）' },
+  { demo: 'big', ar: '11 / 6', text: '連結した工場で煙突を2か所作ると、大きな煙突になり、大型工場にアップグレードされます。\n（大型工場は絶対に爆発しません！大型工場の建設を目指しましょう！）' },
   { demo: 'ending', ar: '1 / 1', text: '自分と相手の連続パスでゲーム終了です。\n一色だけに囲まれた空き地には工場が自動建設されます。\n工場1つにつき1ポイント、後手の白にはハンデで+7.5ポイントです。ポイントが多い方の勝利です！' }
 ];
 {
@@ -1858,12 +1859,15 @@ if (DEMO && DEMO !== 'free') {
       N = 9; vs = '2p'; newGame(); startAs(1);
       if (DEMO === 'explode') {                       // white's last vent is plugged -> boom
         await sleep(600);
-        await seqPlay([[3, 4], [4, 4], [5, 4], [8, 8], [4, 3], [8, 0]], 260);
-        await sleep(1800); P(4, 5); await sleep(4200);
+        await seqPlay([[3, 4], [4, 4], [4, 3], [5, 4], [5, 3], [8, 8], [6, 4], [8, 0], [4, 5], [0, 8]], 260);      // a connected white pair gets surrounded
+        await sleep(1800); P(5, 5); await sleep(4200);
       } else if (DEMO === 'capture') {                // a "suicide" point that blows up the opponent first: ghost + warning rings, then the build
         await sleep(600);
         await seqPlay([[2, 0], [1, 0], [1, 1], [0, 1], [0, 2], [8, 8]], 260);
-        await sleep(1800); hover = -1; setHover(0); await sleep(1800); P(0, 0); await sleep(4200);
+        await sleep(1800);
+        const cr = cv.getBoundingClientRect(), cl = cr.left, ct = cr.top, mk =document.createElement('div'), mr = cs * .46;      // a gold ring marks the candidate point, then the factory is built there
+        mk.style.cssText = `position:fixed;z-index:5;pointer-events:none;left:${cl + M - mr}px;top:${ct + M - mr}px;width:${2 * mr}px;height:${2 * mr}px;border-radius:50%;box-sizing:border-box;border:${Math.max(3, cs * .05)}px solid #ffd860;box-shadow:0 0 16px rgba(255,200,80,.8),inset 0 0 12px rgba(255,200,80,.5)`;
+        document.body.appendChild(mk); await sleep(1800); mk.remove(); P(0, 0); await sleep(4200);
       } else if (DEMO === 'big') {                    // the second eye is closed -> 大型工場
         await sleep(600);
         await seqPlay([[0, 0], [8, 8], [0, 1], [8, 6], [1, 1], [8, 4], [2, 1], [6, 8], [2, 0], [6, 6], [3, 1], [6, 4], [4, 1], [4, 8]], 150);
