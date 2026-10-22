@@ -696,7 +696,8 @@ function cpuMove() {
     cand.push({ i, s, cap: r.captured.length, resc, libs });
   }
   if (passes === 1) {                         // the player has just passed: only worthwhile moves, otherwise pass too (even when behind)
-    const m = moveAfterPlayerPass(cand, c, lv);
+    let m = moveAfterPlayerPass(cand, c, lv);
+    if (m < 0) m = noPassMove(cand, c);       // ... unless a factory can still be added next to a living chain, or a chain that is not alive yet can still try to live
     if (m < 0) doPass(); else playMove(m);
     return;
   }
@@ -727,7 +728,67 @@ function cpuMove() {
   if (lv === 1 && cand.length > 3 && Math.random() < .12) cand[0] = cand[1 + ((Math.random() * Math.min(8, cand.length - 1)) | 0)];   // apprentice slips up
   const best = cand.length ? cand[0].s : -1e9, bi = cand.length ? cand[0].i : -1;
   const doPassNow = bi < 0 || best < -6 || moveNo > N * N * 1.6;
-  if (doPassNow) doPass(); else playMove(bi);
+  if (doPassNow) { const m = noPassMove(cand, c); if (m < 0) doPass(); else playMove(m); } else playMove(bi);
+}
+
+/* The CPU never passes while it still has useful work (the score is the number of factories, so every legal stone that stays alive is a point):
+   (1) a point next to one of its living chains (a chain with two eyes) that lies in neutral ground, keeps both eyes and is not a self-atari;
+   (2) any of its chains that does not have two eyes yet: keep playing as if it could still live, until the opponent really captures it. */
+function eyesIn(b, i) {                       // one-point eyes of the chain that contains stone i (every neighbour of the point belongs to that chain)
+  const set = new Set(group(b, i).stones); let n = 0;
+  for (let p = 0; p < N * N; p++) {
+    if (b[p]) continue;
+    const ns = nbr[p].filter(q => q >= 0);
+    if (ns.length && ns.every(q => set.has(q))) n++;
+  }
+  return n;
+}
+function regionBorder(b, p) {                 // the empty region around p and the colours that touch it
+  const reg = new Set([p]), st = [p], col = new Set();
+  while (st.length) { const a = st.pop(); for (const q of nbr[a]) { if (q < 0) continue; if (!b[q]) { if (!reg.has(q)) { reg.add(q); st.push(q); } } else col.add(b[q]); } }
+  return { reg, col };
+}
+function noPassMove(cand, c) {
+  if (moveNo > N * N * 1.6) return -1;        // hard stop so a game can always finish
+  const e = 3 - c, byIdx = new Map(cand.map(x => [x.i, x]));
+  const alive = new Set(), weak = [], seenS = new Set();
+  for (let i = 0; i < N * N; i++) {
+    if (board[i] !== c || seenS.has(i)) continue;
+    const g = group(board, i); g.stones.forEach(x => seenS.add(x));
+    if (eyesIn(board, i) >= 2) g.stones.forEach(x => alive.add(x)); else weak.push({ stones: g.stones, libs: g.libs.size, eyes: eyesIn(board, i) });
+  }
+  // (1) extend a living chain into neutral ground
+  let best = null;
+  if (alive.size) for (let p = 0; p < N * N; p++) {
+    if (board[p] || !nbr[p].some(q => q >= 0 && alive.has(q))) continue;
+    const cd = byIdx.get(p); if (!cd || failBlocked(p)) continue;
+    const { col } = regionBorder(board, p);
+    if (!(col.has(c) && col.has(e))) continue;              // own territory scores anyway, enemy territory is the invasion logic's business: only neutral ground adds a point
+    const r = tryMove(board, p, c); if (!r.ok) continue;
+    const gi = group(r.nb, p); if (gi.libs.size < 2 || eyesIn(r.nb, p) < 2) continue;            // keep two eyes and never a self-atari
+    const sc = cd.cap * 5 + Math.min(gi.libs.size, 5) * .5 + (nbr[p].some(q => q >= 0 && board[q] === e) ? 1.5 : 0) + rnd(0, .3);
+    if (!best || sc > best.sc) best = { i: p, sc };
+  }
+  if (best) return best.i;
+  // (2) chains that are not alive: try to make eyes / liberties until they are captured
+  if (!weak.length) return -1;
+  best = null;
+  for (const cd of cand) {
+    const r = tryMove(board, cd.i, c); if (!r.ok) continue;
+    let gain = cd.cap * 6, touch = false;
+    for (const w of weak) {
+      const near = nbr[cd.i].some(q => q >= 0 && w.stones.includes(q)) || [...w.stones].some(s => Math.abs(s % N - cd.i % N) + Math.abs(((s / N) | 0) - ((cd.i / N) | 0)) <= 2);
+      if (!near) continue; touch = true;
+      const g2 = group(r.nb, w.stones[0]);
+      gain += 10 * (eyesIn(r.nb, w.stones[0]) - w.eyes) + 1.4 * (g2.libs.size - w.libs) + (w.libs === 1 && g2.libs.size > 1 ? 8 : 0);
+      if (r.nb[w.stones[0]] === 0) gain += 6;                // (kept a chain alive by capturing the attacker)
+    }
+    if (!touch && !cd.cap) continue;
+    gain -= group(r.nb, cd.i).libs.size === 1 ? 9 : 0;      // avoid a self-atari when anything else exists
+    gain += rnd(0, .4);
+    if (!best || gain > best.sc) best = { i: cd.i, sc: gain };
+  }
+  return best ? best.i : -1;
 }
 
 /* After the player passes the CPU plays on only if it has a worthwhile move:
@@ -1972,7 +2033,7 @@ if (DEMO && DEMO !== 'free') {
 }
 
 // expose for debugging / automated checks
-window.__game = { setCrop(c) { FREE_CROP = c; layout(); }, get cvRect() { const r = cv.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }, advLocked(ms) { const base = Math.max(performance.now(), lockUntil + 1); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
+window.__game = { noPassTry(c) { const cand = []; for (let i = 0; i < N * N; i++) { if (board[i]) continue; const r = tryMove(board, i, c); if (r.ok) cand.push({ i, cap: r.captured.length }); } return noPassMove(cand, c); }, eyesIn, weakChains(c) { const out = [], seenS = new Set(); for (let i = 0; i < N * N; i++) { if (board[i] !== c || seenS.has(i)) continue; const g = group(board, i); g.stones.forEach(x => seenS.add(x)); if (eyesIn(board, i) < 2) out.push(g.stones); } return out; }, setCrop(c) { FREE_CROP = c; layout(); }, get cvRect() { const r = cv.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }, advLocked(ms) { const base = Math.max(performance.now(), lockUntil + 1); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
   adv(ms) { const base = performance.now(); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
   hoverAt(i) { hover = -1; setHover(i); }, get cs() { return cs; }, get M() { return M; }, get S() { return S; }, get dpr() { return dpr; }, failPush(i) { invFail.push({ i, at: moveNo }); }, failBlocked, get haze() { return hazeCur; }, updateHaze, setLv(v) { cpuLevel = v; }, get chimLvl() { return chimLvl; }, get eyeCnt() { return eyeCnt; }, get meta() { return meta; }, startAs, startEnding, tickEnding, reveal, get ending() { return ending; }, cpuMove, get cpuTimer() { return cpuTimer; }, get lock() { return lockUntil; }, get phase() { return phase; }, get board() { return board; }, playMove, doPass, tryMove, get turn() { return turn; }, set vs(v) { vs = v; }, get N() { return N; }, get caps() { return caps; }, setN(n){ N = n; newGame(); } };
 })();
