@@ -106,7 +106,40 @@ h1{
 .fac .gauge{width:100%;height:auto;display:block;margin-top:2px}
 .fac .num{font-family:'Cinzel Decorative',serif;font-size:20px;line-height:1;color:var(--brass-hi);margin-top:-6px}
 .fac .lbl{font-size:10px;color:#b99a58;margin-top:2px}
-.fac .own{font-size:11px;color:#cdb98a;margin-top:3px}
+.fac .own{font-size:11px;color:#cdb98a;margin-top:3px;min-height:1.3em}
+.fac .score{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px}
+.fac .score .unit{font-size:13px;font-weight:700;color:#e6d3a0;white-space:nowrap}
+/* mechanical roller counter ("n基が稼働中" = the score): each digit is a brass-framed drum that rolls to its value */
+.dial{display:inline-flex;gap:3px;padding:4px 5px;font-size:30px;position:relative;
+  background:linear-gradient(#0b0704,#1f160b 50%,#0b0704);border:2px solid var(--brass-lo);border-radius:7px;
+  box-shadow:inset 0 0 8px #000,0 1px 0 rgba(255,255,255,.14),0 3px 6px rgba(0,0,0,.5)}
+.dial .dc{display:block;width:.72em;height:1.18em;overflow:hidden;position:relative;border-radius:3px;
+  background:linear-gradient(#160f08,#33240f 50%,#160f08);box-shadow:inset 0 0 5px #000,0 0 0 1px rgba(246,220,138,.22)}
+.dial .dc::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(rgba(0,0,0,.82),rgba(0,0,0,0) 30%,rgba(255,235,170,.06) 50%,rgba(0,0,0,0) 70%,rgba(0,0,0,.82))}
+.dial .ds{display:flex;flex-direction:column;transition:transform .75s cubic-bezier(.22,1.45,.42,1);will-change:transform}
+.dial .ds i{display:block;height:1.18em;line-height:1.18em;text-align:center;font-style:normal;color:#f6e7b8;
+  font-family:'Cinzel Decorative','Shippori Mincho',serif;font-weight:700;text-shadow:0 0 8px rgba(255,190,80,.55)}
+.f2 .dial{border-color:#2a7f7a}
+.f2 .dial .ds i{color:#dff6ee;text-shadow:0 0 8px rgba(80,230,220,.5)}
+.dboom{position:absolute;left:50%;top:50%;width:0;height:0;pointer-events:none;z-index:6;font-size:inherit}
+.dboom .pt{position:absolute;left:calc(var(--sz,.7) * -.5em);top:calc(var(--sz,.7) * -.5em);width:calc(var(--sz,.7) * 1em);height:calc(var(--sz,.7) * 1em);
+  animation:dPart var(--dur,.95s) cubic-bezier(.2,.65,.4,1) forwards;filter:drop-shadow(0 .06em .06em rgba(0,0,0,.6))}
+.dboom .pt svg{width:100%;height:100%;display:block;animation:dSpin var(--dur,.95s) linear forwards}
+.dboom .sp{position:absolute;left:-.07em;top:-.07em;width:.14em;height:.14em;border-radius:50%;background:#f3e6b8;box-shadow:0 0 .2em #c9a24a;animation:dSpark .6s cubic-bezier(.1,.7,.3,1) forwards}
+.dboom .sm{position:absolute;left:calc(var(--k,1) * -1.4em);top:calc(var(--k,1) * -1.4em);width:calc(var(--k,1) * 2.8em);height:calc(var(--k,1) * 2.8em);border-radius:50%;
+  background:radial-gradient(circle,rgba(210,205,195,.55),rgba(160,150,135,0) 70%);animation:dSmoke 1.1s ease-out .08s forwards;opacity:0}
+@keyframes dPart{0%{transform:translate(0,0) scale(.35);opacity:1}18%{opacity:1}
+  50%{transform:translate(calc(var(--dx) * .62),calc(var(--dy) * .62 - var(--up,.6em))) scale(1)}
+  100%{transform:translate(var(--dx),calc(var(--dy) + var(--fall,1.4em))) scale(.9);opacity:0}}
+@keyframes dSpin{from{transform:rotate(0)}to{transform:rotate(var(--rot,540deg))}}
+@keyframes dSpark{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(.2);opacity:0}}
+@keyframes dSmoke{0%{transform:scale(.3);opacity:0}25%{opacity:.85}100%{transform:translateY(-1em) scale(1.35);opacity:0}}
+.dial.up{animation:dialUp .7s ease-out}
+.dial.down{animation:dialDown .6s ease-out}
+@keyframes dialUp{0%{box-shadow:inset 0 0 8px #000,0 0 0 rgba(255,200,90,0)}35%{box-shadow:inset 0 0 8px #000,0 0 16px rgba(255,200,90,.85)}100%{box-shadow:inset 0 0 8px #000,0 3px 6px rgba(0,0,0,.5)}}
+@keyframes dialDown{0%,100%{transform:none}10%{transform:translate(-.2em,.05em) rotate(-2deg)}24%{transform:translate(.2em,-.05em) rotate(2deg)}38%{transform:translate(-.15em,.05em)}52%{transform:translate(.12em,0)}68%{transform:translate(-.06em,0)}
+  0%{box-shadow:inset 0 0 8px #000,0 0 14px rgba(255,235,180,.7)}100%{box-shadow:inset 0 0 8px #000,0 3px 6px rgba(0,0,0,.5)}}
 .status{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:#cdb98a}
 .status b{font-family:'Cinzel Decorative',serif;font-size:15px;color:var(--brass-hi)}
 .hint{min-height:64px;font-size:13.5px;line-height:1.6;padding-top:4px}
@@ -185,13 +218,16 @@ body.demo #banner .bnbtns{display:none}
     background:linear-gradient(160deg,#3d2c1c,#21170f);border:2px solid var(--brass-lo);border-radius:10px;
     box-shadow:inset 0 0 0 1px rgba(246,220,138,.16),0 4px 10px rgba(0,0,0,.5);
   }
-  #topbar .tbTitle{font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:17px;letter-spacing:.04em;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510,0 0 12px rgba(255,160,50,.4);white-space:nowrap}
-  #topbar .tbTurn{display:flex;align-items:center;gap:7px;font-size:13.5px;white-space:nowrap}
-  #topbar .tbMoves{font-size:12px;color:#cdb98a;white-space:nowrap}
-  #topbar .tbMoves b{font-family:'Cinzel Decorative',serif;font-size:14px;color:var(--brass-hi)}
-  #tbDot{width:13px;height:13px;border-radius:50%;border:2px solid #b8733a;background:#2c3037;box-shadow:0 0 8px rgba(255,122,31,.7)}
-  #tbDot.t2{border-color:#2a9d97;background:#e8c871;box-shadow:0 0 8px rgba(63,224,212,.7)}
-  #tbDot.idle{box-shadow:none;opacity:.5}
+  #topbar .tbTitle{font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:25px;letter-spacing:.04em;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510,0 0 12px rgba(255,160,50,.4);white-space:nowrap}
+  #topbar .tbLeft{display:flex;flex-direction:column;gap:2px;min-width:0}
+  #topbar .tbScore{display:flex;gap:6px;margin-left:auto}
+  #topbar .tbCell{display:flex;flex-direction:column;align-items:center;gap:1px;padding:3px 6px 4px;border:1px solid #5a4426;border-radius:8px;background:rgba(0,0,0,.25);filter:saturate(.7) brightness(.82);transition:filter .3s,box-shadow .3s,border-color .3s}
+  #topbar .tbCell.active{filter:none;border-color:var(--brass-hi);box-shadow:0 0 12px rgba(255,170,60,.45)}
+  #topbar .tbCell.c2.active{box-shadow:0 0 12px rgba(63,224,212,.45)}
+  #topbar .tbCell small{font-size:9.5px;letter-spacing:.04em;color:#cdb98a;white-space:nowrap}
+  #topbar .tbCell .row{display:flex;align-items:center;gap:3px}
+  #topbar .tbCell em{font-style:normal;font-size:11px;font-weight:700;color:#e6d3a0}
+  #topbar .dial{font-size:17px;padding:2px 3px;gap:2px;border-width:1.5px;border-radius:5px}
   /* the lower area: controls first, then the hint; title and the big faction cards are replaced by the top bar */
   #panel{width:100%;max-width:560px;gap:8px}
   #panel .p-title,#panel .factions{display:none}
@@ -208,9 +244,13 @@ body.demo #banner .bnbtns{display:none}
 <canvas id="bg"></canvas>
 <div id="app">
   <div id="topbar">
-    <span class="tbTitle">ファクトリ囲碁</span>
-    <span class="tbTurn"><i id="tbDot"></i><b id="tbTurnTxt">黒の手番</b></span>
-    <span class="tbMoves">手数 <b id="tbMoves">0</b></span>
+    <div class="tbLeft">
+      <span class="tbTitle">ファクトリ囲碁</span>
+    </div>
+    <div class="tbScore">
+      <div class="tbCell c1 f1" id="tbC1"><small>黒の工場</small><div class="row"><span class="dial" id="tbDial1"></span><em>基</em></div></div>
+      <div class="tbCell c2 f2" id="tbC2"><small>白の工場</small><div class="row"><span class="dial" id="tbDial2"></span><em>基</em></div></div>
+    </div>
   </div>
   <div id="boardWrap">
     <canvas id="board"></canvas>
@@ -236,12 +276,14 @@ body.demo #banner .bnbtns{display:none}
       <div class="plate fac f1" id="fac1">
         <canvas id="emb1"></canvas>
         <div class="nm" id="nm1">黒の工場</div>
-        <div class="own">稼働 <b id="cnt1">0</b><span id="big1"></span></div><span id="cap1" class="hidden">0</span>
+        <div class="score"><span class="dial" id="dial1"></span><span class="unit">基が稼働中</span></div>
+        <div class="own"><span id="big1"></span></div><span id="cap1" class="hidden">0</span>
       </div>
       <div class="plate fac f2" id="fac2">
         <canvas id="emb2"></canvas>
         <div class="nm" id="nm2">白の工場</div>
-        <div class="own">稼働 <b id="cnt2">0</b><span id="big2"></span></div><span id="cap2" class="hidden">0</span>
+        <div class="score"><span class="dial" id="dial2"></span><span class="unit">基が稼働中</span></div>
+        <div class="own"><span id="big2"></span></div><span id="cap2" class="hidden">0</span>
       </div>
     </div>
 
@@ -1708,20 +1750,67 @@ function hintHTML(now) {
   }
   return `交点をクリックして <b>${FAC[turn].name}</b> の工場を建設。<br>工場にカーソルを重ねると排気口を確認できる。`;
 }
+/* ---- score = number of working factories, shown on mechanical roller counters (PC plates + phone top bar) */
+class Dial {
+  constructor(el) { this.el = el; this.v = -1; this.cols = []; this.digits = 0; }
+  build(digits) {
+    this.el.innerHTML = ''; this.cols = []; this.digits = digits;
+    for (let k = 0; k < digits; k++) {
+      const dc = document.createElement('span'), ds = document.createElement('span'); dc.className = 'dc'; ds.className = 'ds';
+      ds.innerHTML = '0123456789'.split('').map(d => `<i>${d}</i>`).join(''); dc.appendChild(ds); this.el.appendChild(dc); this.cols.push(ds);
+    }
+    this.v = -1;
+  }
+  boom(lost) {                      // factories blow up: gears, nuts and bolts fly off the counter (with a puff of steam)
+    const k = Math.min(1 + (lost - 1) * .2, 2), b = document.createElement('span'); b.className = 'dboom'; b.style.setProperty('--k', k);
+    const COL = [['#d9b24c', '#6b4d12'], ['#8d949e', '#2e3238'], ['#c47a3c', '#5a3214'], ['#e7cf86', '#7a5a18']];
+    const gear = (c, teeth) => {
+      let d = ''; for (let i = 0; i < teeth * 4; i++) { const a = i / (teeth * 4) * 6.2832, r = (i % 4 === 0 || i % 4 === 1) ? 48 : 36; d += (i ? 'L' : 'M') + (50 + Math.cos(a) * r).toFixed(1) + ' ' + (50 + Math.sin(a) * r).toFixed(1); }
+      return `<svg viewBox="0 0 100 100"><path d="${d}Z" fill="${c[0]}" stroke="${c[1]}" stroke-width="5" stroke-linejoin="round"/><circle cx="50" cy="50" r="15" fill="#1a120a" stroke="${c[1]}" stroke-width="4"/></svg>`;
+    };
+    const nut = c => `<svg viewBox="0 0 100 100"><path d="M50 6L88 28V72L50 94L12 72V28Z" fill="${c[0]}" stroke="${c[1]}" stroke-width="6" stroke-linejoin="round"/><circle cx="50" cy="50" r="19" fill="#1a120a" stroke="${c[1]}" stroke-width="5"/></svg>`;
+    const bolt = c => `<svg viewBox="0 0 100 100"><rect x="42" y="16" width="16" height="62" rx="3" fill="${c[0]}" stroke="${c[1]}" stroke-width="5"/><path d="M22 16H78L70 4H30Z" fill="${c[0]}" stroke="${c[1]}" stroke-width="5" stroke-linejoin="round"/></svg>`;
+    let h = '<i class="sm"></i>';
+    const n = Math.min(5 + lost * 2, 14);
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - .5) * 3.6, r = (2.2 + Math.random() * 2.6) * k, c = COL[i % COL.length], t = i % 3;
+      const sz = (t === 0 ? 1.15 : t === 1 ? .8 : .75) * (.85 + Math.random() * .4), dur = (.8 + Math.random() * .5).toFixed(2);
+      h += `<i class="pt" style="--dx:${(Math.cos(a) * r).toFixed(2)}em;--dy:${(Math.sin(a) * r).toFixed(2)}em;--up:${(.4 + Math.random() * .8).toFixed(2)}em;--fall:${(1 + Math.random() * 1.4).toFixed(2)}em;--rot:${Math.round((Math.random() < .5 ? -1 : 1) * (360 + Math.random() * 540))}deg;--sz:${sz.toFixed(2)};--dur:${dur}s">${t === 0 ? gear(c, 7 + (i % 3)) : t === 1 ? nut(c) : bolt(c)}</i>`;
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * 6.283, r = (1 + Math.random() * 1.4) * k;
+      h += `<i class="sp" style="--dx:${(Math.cos(a) * r).toFixed(2)}em;--dy:${(Math.sin(a) * r).toFixed(2)}em;animation-delay:${(Math.random() * .06).toFixed(2)}s"></i>`;
+    }
+    b.innerHTML = h; this.el.appendChild(b); setTimeout(() => b.remove(), 1500);
+  }
+  set(n, digits) {
+    if (digits !== this.digits) this.build(digits);
+    if (n === this.v) return;
+    const old = this.v, str = String(n).padStart(this.digits, '0');
+    if (old < 0) this.cols.forEach(ds => ds.style.transition = 'none');           // first value: no roll
+    this.cols.forEach((ds, k) => ds.style.transform = `translateY(${-(+str[k]) * 1.18}em)`);
+    if (old < 0) { void this.el.offsetWidth; this.cols.forEach(ds => ds.style.transition = ''); }
+    else { this.el.classList.remove('up', 'down'); void this.el.offsetWidth; this.el.classList.add(n > old ? 'up' : 'down'); if (n < old) this.boom(old - n); }
+    this.v = n;
+  }
+}
+const dials = { 1: [new Dial($('#dial1')), new Dial($('#tbDial1'))], 2: [new Dial($('#dial2')), new Dial($('#tbDial2'))] };
+function updateScores(now) {          // stones still waiting to blow up count until they actually explode, so the counter drops in step with the blast
+  const n = { 1: 0, 2: 0 }; for (let i = 0; i < N * N; i++) if (board[i]) n[board[i]]++;
+  for (const d of dying) if (now < d.explodeAt) n[d.color]++;
+  if (phase === 'ending' || phase === 'over') for (const c of endStacks.values()) n[c]++;     // standing stacks count as a point
+  const digits = String(N * N).length;
+  for (const c of [1, 2]) dials[c].forEach(d => d.set(n[c], digits));
+}
 function updateUI() {
   for (const c of [1, 2]) {
     $('#cap' + c).textContent = caps[c];
-    let n = 0; for (let i = 0; i < N * N; i++) if (board[i] === c) n++;
-    if (phase === 'ending' || phase === 'over') for (const sc3 of endStacks.values()) if (sc3 === c) n++;     // standing stacks count as a point
-    $('#cnt' + c).textContent = n;
     $('#big' + c).textContent = bigChains[c] ? ` ／ 大型工場 ${bigChains[c]}` : '';
     $('#fac' + c).classList.toggle('active', phase === 'play' && turn === c);
+    $('#tbC' + c).classList.toggle('active', phase === 'play' && turn === c);
   }
+  updateScores(performance.now());
   $('#moveNo').textContent = moveNo;
-  $('#tbMoves').textContent = moveNo;                      // the slim top bar used on phones
-  $('#tbTurnTxt').textContent = phase === 'play' ? `${FAC[turn].name.replace('の工場', '')}の手番${vs === 'cpu' ? (turn === human ? '（あなた）' : '（CPU）') : ''}`
-    : phase === 'select' ? '先手・後手を選択' : phase === 'ending' ? '終局：集計中' : '対局終了';
-  $('#tbDot').className = phase === 'play' ? (turn === 2 ? 't2' : '') : 'idle';
   $('#turnTxt').textContent = phase === 'play' ? `手番：${FAC[turn].name}` : phase === 'select' ? '先手・後手を選択' : phase === 'ending' ? '終局：工場を自動建設' : '対局終了';
   const cpuTurn = isCpuTurn();
   $('#nm1').textContent = '黒の工場' + (human === 1 ? '（あなた）' : '（CPU）');
@@ -1834,6 +1923,7 @@ function frame(now) {
     render(now, dt);
     drawBG(now);
     drawEmblems(now, dt);
+    updateScores(now);
     const h = hintHTML(now); if (h !== lastHint) { $('#hint').innerHTML = h; lastHint = h; }
     if (phase === 'play' && isCpuTurn() && now >= lockUntil && !cpuTimer) {
       cpuTimer = setTimeout(() => { cpuTimer = 0; if (phase === 'play' && isCpuTurn()) { cpuMove(); } }, 520);
