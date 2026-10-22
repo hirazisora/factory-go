@@ -162,7 +162,10 @@ h1{
 .opts select{
   font:inherit;color:var(--paper);background:#150e08;border:1px solid var(--brass-lo);border-radius:6px;padding:5px 6px;
 }
-.opts label.chk{grid-column:1/3;display:flex;gap:8px;align-items:center;cursor:pointer}
+.opts .chkRow{grid-column:1/3;display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+.opts label.chk{display:flex;gap:8px;align-items:center;cursor:pointer}
+.chkTap{display:none!important}                       /* the tentative-stone option only exists on the phone layout */
+@media (max-width:920px){.chkTap{display:flex!important}}
 #log{max-height:120px;overflow:auto;font-size:12.5px;line-height:1.55;color:#cdb98a}
 #log div{border-bottom:1px dotted rgba(185,154,88,.2);padding:1px 0}
 #log div.hot{color:#ffb070}
@@ -304,7 +307,10 @@ body.demo #banner .bnbtns{display:none}
       <select id="selSize"><option value="9" selected>9 × 9</option><option value="13">13 × 13</option><option value="19">19 × 19</option></select>
       <span>相手</span>
       <select id="selLv"><option value="1" selected>見習いCPU（弱い）</option><option value="2">職人CPU（ふつう）</option><option value="3">親方CPU（強い）</option><option value="h">両方人間が操作（ローカル対戦用）</option></select>
-      <label class="chk"><input type="checkbox" id="chkSound" checked> 効果音</label>
+      <div class="chkRow">
+        <label class="chk"><input type="checkbox" id="chkSound" checked> 効果音</label>
+        <label class="chk chkTap"><input type="checkbox" id="chkTap" checked> 仮置き</label>
+      </div>
     </div>
 
     <div class="plate p-log"><div id="log"></div></div>
@@ -548,10 +554,13 @@ function logMsg(t, hot) {
   while (L.children.length > 40) L.removeChild(L.lastChild);
 }
 
+const SOOT_MOVES = 6;
+function ageSoot() { for (const d of decals) d.n = (d.n || 0) + 1; }      // every move (or pass) made after a blast thins its soot by one step
 function playMove(i) {
   const r = tryMove(board, i, turn);
   if (!r.ok) return false;
   const now = performance.now(), c = turn;
+  ageSoot();                                    // (soot from THIS move's own blast appears later, so it starts counting from the next move)
   board = r.nb;
   meta[i] = newMeta(now);
   let readyAt;
@@ -584,6 +593,7 @@ const dist = (a, b) => Math.abs((a%N) - (b%N)) + Math.abs(((a/N)|0) - ((b/N)|0))
 let passFx = null;                          // { t0, who }: the "パス" call-out shown over the board
 function doPass() {
   if (phase !== 'play') return;
+  ageSoot();
   const closing = passes + 1 >= 2;            // this is the second pass in a row: the game ends
   passFx = closing ? { t0: performance.now(), who: turn, text: '終局！', pre: '両者パスにより', dur: 2000 } : { t0: performance.now(), who: turn };
   if (closing) sfxEndCall(); else sfxPass();
@@ -972,7 +982,7 @@ function explode(d, now) {
     addP({ t:'p', spr: n%3 ? 'dsmoke' : 'smoke', x:x+rnd(-8,8)*k, y:y+rnd(-8,8)*k, vx:Math.cos(a)*v, vy:Math.sin(a)*v - 22*k,
       s0:cs*.6, grow:cs*1.3, life:rnd(1.5,2.5), age:0, a:.6 });
   }
-  decals.push({ x, y, t0:now, rot:rnd(0,TAU) });
+  decals.push({ x, y, t0:now, rot:rnd(0,TAU), v:(Math.random() * 3) | 0, s:rnd(.9, 1.15) });
   shake = Math.min(13, shake + 5.5);
   sfxBoom();
 }
@@ -1596,9 +1606,11 @@ function render(now, dt) {
   if (shake) g.translate(rnd(-shake, shake) * .5, rnd(-shake, shake) * .5);
   g.drawImage(boardCv, 0, 0, S, S);
   // scorch decals
-  for (const d of decals) {
-    const age = (now - d.t0) / 1000, a = clamp(.95 - age / 40, .22, .95);
-    g.save(); g.globalAlpha = a; g.translate(d.x, d.y); g.rotate(d.rot); g.drawImage(puff.scorch, -cs * .8, -cs * .8, cs * 1.6, cs * 1.6); g.restore();
+  for (let k = decals.length - 1; k >= 0; k--) {              // soot: one step thinner with every move, gone after six moves
+    const d = decals[k], target = Math.max(0, 1 - (d.n || 0) / SOOT_MOVES);
+    d.f = d.f === undefined ? 1 : d.f + (target - d.f) * Math.min(1, dt * 5);          // each step eases in rather than jumping
+    if (target === 0 && d.f < .02) { decals.splice(k, 1); continue; }
+    g.save(); g.globalAlpha = .95 * d.f; g.translate(d.x, d.y); g.rotate(d.rot); g.drawImage(puff.scorch, -cs * .8, -cs * .8, cs * 1.6, cs * 1.6); g.restore();
   }
   drawHaze(g, now);
   // liberties of hovered group
@@ -1903,7 +1915,7 @@ function setHover(i) {
 }
 /* phone UI: the first tap only places a ghost factory (a tentative stone), tapping the same point again builds it; tapping another point moves the ghost */
 let pending = -1, ptrType = 'mouse';
-const twoTap = () => innerWidth < 920 && ptrType !== 'mouse';
+const twoTap = () => innerWidth < 920 && ptrType !== 'mouse' && $('#chkTap').checked;
 cv.addEventListener('pointermove', e => { ptrType = e.pointerType; if (pending >= 0 && e.pointerType !== 'mouse' && !e.buttons) return; setHover(idxFromEvent(e)); });
 cv.addEventListener('pointerleave', e => { if (pending >= 0 && e.pointerType !== 'mouse') return; setHover(-1); });
 cv.addEventListener('pointerdown', e => { ptrType = e.pointerType; if (e.pointerType !== 'mouse') setHover(idxFromEvent(e)); });
@@ -1938,6 +1950,8 @@ $('#selLv').onchange = e => {              // opponent: three CPU levels, or "bo
   logMsg(`対戦相手：${e.target.selectedOptions[0].textContent}`);
 };
 $('#chkSound').onchange = () => ac();
+try { const v = localStorage.getItem('fgoTentative'); if (v !== null) $('#chkTap').checked = v === '1'; } catch (e) {}      // remembered between visits
+$('#chkTap').onchange = e => { pending = -1; if (hover >= 0) setHover(-1); try { localStorage.setItem('fgoTentative', e.target.checked ? '1' : '0'); } catch (err) {} };
 // any tap / key re-arms audio (browsers can suspend it between games or when the tab loses focus)
 ['pointerdown', 'keydown', 'touchend'].forEach(ev => document.addEventListener(ev, () => { if (AC) ac(); }, { passive: true }));
 document.addEventListener('visibilitychange', () => { if (!document.hidden && AC) ac(); });
