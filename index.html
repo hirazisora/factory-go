@@ -157,6 +157,8 @@ h1{
 .btn:disabled{filter:grayscale(.8) brightness(.55);cursor:not-allowed;transform:none}
 .btn.danger{background:linear-gradient(#e8a384,#b4552f 55%,#7d3417);color:#fff4e8}
 .opts{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:13px}
+.opts span{white-space:nowrap}
+.opts select{min-width:0}
 .opts select{
   font:inherit;color:var(--paper);background:#150e08;border:1px solid var(--brass-lo);border-radius:6px;padding:5px 6px;
 }
@@ -300,8 +302,8 @@ body.demo #banner .bnbtns{display:none}
       </div>
       <span>盤の大きさ</span>
       <select id="selSize"><option value="9" selected>9 × 9</option><option value="13">13 × 13</option><option value="19">19 × 19</option></select>
-      <span>CPUの強さ</span>
-      <select id="selLv"><option value="1" selected>弱い（見習い）</option><option value="2">普通（職人）</option><option value="3">強い（親方）</option></select>
+      <span>相手</span>
+      <select id="selLv"><option value="1" selected>見習いCPU（弱い）</option><option value="2">職人CPU（ふつう）</option><option value="3">親方CPU（強い）</option><option value="h">両方人間が操作（ローカル対戦用）</option></select>
       <label class="chk"><input type="checkbox" id="chkSound" checked> 効果音</label>
     </div>
 
@@ -524,8 +526,11 @@ function newGame() {
   computeLibs();
   $('#log').innerHTML = '';
   $('#banner').classList.remove('show', 'mini'); $('#bnScore').innerHTML = ''; $('#btnView').textContent = '盤面を見る';
-  $('#start').classList.add('show');
   layout();
+  if (vs === '2p') {                       // two humans on one screen: no side to pick, black starts and both colours are played by hand
+    human = 0; phase = 'play'; $('#start').classList.remove('show');
+    logMsg(`${N}×${N} の工業地帯を整地した。二人対戦：黒の工場（先手）から交互に建設しよう。`);
+  } else $('#start').classList.add('show');
   updateUI();
 }
 function startAs(c) {                     // chosen on the start card: 1 = play first (black), 2 = play second (white)
@@ -1802,9 +1807,10 @@ function hintHTML(now) {
     return `${e >= 2 ? '<span class="good">大型工場<br>（煙突が2か所ある工場。絶対に爆発しない！）</span><br>' : e === 1 ? '小さな煙突が1か所ある。<br>煙突がもう1か所で大型工場が完成<br>' : ''}工場群 <b>${hoverGroup.stones.length}</b> 基 ／ 排気口 <b>${hoverGroup.libs.size}</b> 箇所${hoverGroup.libs.size === 1 ? '<span class="bad">　⚠ 圧力限界！</span>' : ''}`;
   }
   if (hover >= 0 && hoverInfo) {
+    const tapNote = pending >= 0 && hover === pending ? '<br><span class="good">もう一度タップすると建設を確定します。</span>' : '';
     if (hoverInfo.ok) {
-      if (hoverInfo.captured.length) return `<span class="good">${coord(hover)}：相手の排気口を塞ぎ <b>${hoverInfo.captured.length}</b> 基を爆破できる！</span><br>相手工場爆破後に排気口が確保されるため建設可能`;
-      return `${coord(hover)} に工場を建設できる。`;
+      if (hoverInfo.captured.length) return `<span class="good">${coord(hover)}：相手の排気口を塞ぎ <b>${hoverInfo.captured.length}</b> 基を爆破できる！</span><br>相手工場爆破後に排気口が確保されるため建設可能${tapNote}`;
+      return `${coord(hover)} に工場を建設できる。${tapNote}`;
     }
     if (hoverInfo.reason === 'suicide') return '<span class="bad">建設不可：排気口が確保できない場所には建設できない（相手の工場を爆破できる場合は除く）</span>';
     if (hoverInfo.reason === 'ko') return '<span class="bad">着手禁止（コウ）：直前と同じ盤面に戻ってしまう。</span>';
@@ -1864,6 +1870,7 @@ function updateScores(now) {          // stones still waiting to blow up count u
   for (const c of [1, 2]) dials[c].forEach(d => d.set(n[c], digits));
 }
 function updateUI() {
+  if (pending >= 0 && (phase !== 'play' || isCpuTurn() || board[pending])) pending = -1;      // the tentative stone is dropped when the turn or the game changes
   for (const c of [1, 2]) {
     $('#cap' + c).textContent = caps[c];
     $('#big' + c).textContent = bigChains[c] ? ` ／ 大型工場 ${bigChains[c]}` : '';
@@ -1874,8 +1881,8 @@ function updateUI() {
   $('#moveNo').textContent = moveNo;
   $('#turnTxt').textContent = phase === 'play' ? `手番：${FAC[turn].name}` : phase === 'select' ? '先手・後手を選択' : phase === 'ending' ? '終局：工場を自動建設' : '対局終了';
   const cpuTurn = isCpuTurn();
-  $('#nm1').textContent = '黒の工場' + (human === 1 ? '（あなた）' : '（CPU）');
-  $('#nm2').textContent = '白の工場' + (human === 2 ? '（あなた）' : '（CPU）');
+  $('#nm1').textContent = '黒の工場' + (vs === '2p' ? '' : human === 1 ? '（あなた）' : '（CPU）');
+  $('#nm2').textContent = '白の工場' + (vs === '2p' ? '' : human === 2 ? '（あなた）' : '（CPU）');
   $('#btnPass').disabled = phase !== 'play' || cpuTurn;
 }
 
@@ -1894,14 +1901,21 @@ function setHover(i) {
   if (board[i]) { const g = group(board, i); hoverGroup = { color: board[i], stones: g.stones, libs: g.libs }; }
   else hoverInfo = tryMove(board, i, turn);
 }
-cv.addEventListener('pointermove', e => setHover(idxFromEvent(e)));
-cv.addEventListener('pointerleave', () => setHover(-1));
-cv.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') setHover(idxFromEvent(e)); });
+/* phone UI: the first tap only places a ghost factory (a tentative stone), tapping the same point again builds it; tapping another point moves the ghost */
+let pending = -1, ptrType = 'mouse';
+const twoTap = () => innerWidth < 920 && ptrType !== 'mouse';
+cv.addEventListener('pointermove', e => { ptrType = e.pointerType; if (pending >= 0 && e.pointerType !== 'mouse' && !e.buttons) return; setHover(idxFromEvent(e)); });
+cv.addEventListener('pointerleave', e => { if (pending >= 0 && e.pointerType !== 'mouse') return; setHover(-1); });
+cv.addEventListener('pointerdown', e => { ptrType = e.pointerType; if (e.pointerType !== 'mouse') setHover(idxFromEvent(e)); });
 cv.addEventListener('click', e => {
   ac();
   const i = idxFromEvent(e); if (i < 0) return;
   const now = performance.now();
   if (phase !== 'play' || now < lockUntil || isCpuTurn()) return;
+  if (twoTap() && !board[i]) {
+    if (pending !== i) { pending = i; hover = -1; setHover(i); return; }        // first tap: tentative stone only
+  }
+  pending = -1;
   setHover(-1); hover = -2;
   if (!playMove(i)) { hoverInfo = null; }
   hover = -1; setHover(i);
@@ -1913,7 +1927,16 @@ $('#btnView').onclick = () => { const mini = $('#banner').classList.toggle('mini
 $('#btnFirst').onclick = () => { ac(); startAs(1); };
 $('#btnSecond').onclick = () => { ac(); startAs(2); };
 $('#selSize').onchange = e => { N = +e.target.value; newGame(); };
-$('#selLv').onchange = e => { cpuLevel = +e.target.value; logMsg(`CPUの強さ：${e.target.selectedOptions[0].textContent}`); };
+let lvPrev = '1';
+$('#selLv').onchange = e => {              // opponent: three CPU levels, or "both played by humans" (local two-player)
+  const v = e.target.value, toHuman = v === 'h', wasHuman = vs === '2p';
+  if (toHuman !== wasHuman) {              // switching between CPU and human play restarts the game
+    if (phase === 'play' && moveNo > 0 && !confirm('対戦相手を切り替えると、現在の対局は破棄されます。よろしいですか？')) { e.target.value = lvPrev; return; }
+    vs = toHuman ? '2p' : 'cpu'; if (!toHuman) cpuLevel = +v; lvPrev = v; newGame(); return;
+  }
+  if (!toHuman) cpuLevel = +v; lvPrev = v;
+  logMsg(`対戦相手：${e.target.selectedOptions[0].textContent}`);
+};
 $('#chkSound').onchange = () => ac();
 // any tap / key re-arms audio (browsers can suspend it between games or when the tab loses focus)
 ['pointerdown', 'keydown', 'touchend'].forEach(ev => document.addEventListener(ev, () => { if (AC) ac(); }, { passive: true }));
@@ -1994,6 +2017,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+{ const v0 = $('#selLv').value; vs = v0 === 'h' ? '2p' : 'cpu'; cpuLevel = v0 === 'h' ? 1 : +v0; lvPrev = v0; }      // the browser may restore the select's value on reload: follow it
 newGame();
 requestAnimationFrame(frame);
 
