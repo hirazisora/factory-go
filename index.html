@@ -31,7 +31,7 @@ body{
   transition:opacity .4s,transform .4s cubic-bezier(.2,1.4,.4,1);
 }
 #start.show{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
-#start h2{margin:0 0 6px;font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:26px;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510,0 0 16px rgba(255,170,60,.6)}
+#start h2{margin:18px 0 6px;font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:26px;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510,0 0 16px rgba(255,170,60,.6)}
 #start p{margin:0 0 14px;font-size:15px}
 #start .note{font-size:12.5px;color:#cdb98a}
 #start .pick{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -162,6 +162,17 @@ h1{
 .opts select{
   font:inherit;color:var(--paper);background:#150e08;border:1px solid var(--brass-lo);border-radius:6px;padding:5px 6px;
 }
+.ruleRow{display:flex;gap:8px}
+.ruleRow .btn{flex:1 1 0;min-width:0;white-space:nowrap}
+.ruleRow .btn:first-child{flex:1.35 1 0;font-size:17px;font-weight:900;padding-top:12px;padding-bottom:12px;letter-spacing:.04em;-webkit-text-stroke:.4px currentColor}
+.ruleRow .btn:last-child{font-size:13px}
+#rulesRow{order:-2}#newRow{order:-1}
+#newRow::before{content:'';flex:1.35 1 0}
+#newRow .btn,#newRow .btn:first-child{flex:1 1 0;font-size:14px;font-weight:700;padding:9px 8px;-webkit-text-stroke:0;letter-spacing:0}
+#btnPassP{display:none}
+#btnPass{position:absolute;left:50%;bottom:var(--bandY);transform:translate(-50%,50%);width:calc(var(--boardW) * .4);height:calc(var(--bandH) * 1.2);padding:0;font-size:calc(var(--bandH) * .52);letter-spacing:.3em;z-index:4}
+#btnPass:active{transform:translate(-50%,calc(50% + 2px))}
+body.demo #btnPass{display:none}
 .opts .chkRow{grid-column:1/3;display:flex;gap:22px;align-items:center;flex-wrap:wrap}
 .opts label.chk{display:flex;gap:8px;align-items:center;cursor:pointer}
 .chkTap{display:none!important}                       /* the tentative-stone option only exists on the phone layout */
@@ -215,6 +226,8 @@ body.demo #banner .bnbtns{display:none}
 .rm-dots i.on{background:var(--brass-hi);box-shadow:0 0 6px rgba(246,220,138,.7)}
 #topbar{display:none}
 @media (max-width:920px){
+  #btnPass{display:none}#btnPassP{display:block}
+  #newRow{order:-2}#rulesRow{order:-1}#newRow::before{display:none}
   #app{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;gap:10px;padding:8px 8px 20px}
   #boardWrap{position:relative;top:auto;align-self:center}
   /* a slim bar above the board: title + a one-glance turn indicator */
@@ -259,7 +272,9 @@ body.demo #banner .bnbtns{display:none}
   </div>
   <div id="boardWrap">
     <canvas id="board"></canvas>
+    <button class="btn" id="btnPass">パス</button>
     <div id="start">
+      <div class="ruleRow" style="margin-bottom:12px"><button class="btn" id="btnRulesStart">ルールを見る</button><button class="btn" id="btnDiffStart">囲碁との違い</button></div>
       <h2>対戦開始</h2>
       <p>あなたの手番を選んでください<br><span class="note">後手にはハンデとして7.5ポイント加算されます</span></p>
       <div class="pick">
@@ -298,11 +313,8 @@ body.demo #banner .bnbtns{display:none}
     </div>
 
     <div class="plate opts p-ctrl">
-      <button class="btn" id="btnRules" style="grid-column:1/3;margin-bottom:4px">ルールを見る</button>
-      <div class="btns" id="playBtns" style="grid-column:1/3;margin-bottom:4px">
-        <button class="btn" id="btnPass">パス</button>
-        <button class="btn" id="btnNew">新規対局</button>
-      </div>
+      <div class="ruleRow" id="rulesRow" style="grid-column:1/3;margin-bottom:4px"><button class="btn" id="btnRules">ルールを見る</button><button class="btn" id="btnDiff">囲碁との違い</button></div>
+      <div class="ruleRow" id="newRow" style="grid-column:1/3;margin-bottom:4px"><button class="btn" id="btnPassP">パス</button><button class="btn" id="btnNew">新規対局</button></div>
       <span>盤の大きさ</span>
       <select id="selSize"><option value="9" selected>9 × 9</option><option value="13">13 × 13</option><option value="19">19 × 19</option></select>
       <span>相手</span>
@@ -328,6 +340,32 @@ body.demo #banner .bnbtns{display:none}
         <div class="rm-dots" id="rmDots"></div>
         <button class="btn" id="rmNext">次へ ▶</button>
       </div>
+    </div>
+  </div>
+
+  <div id="warnModal" class="rm" aria-hidden="true" role="alertdialog" aria-label="警告">
+    <div class="rm-card">
+      <div class="rm-head"><span class="rm-title" style="color:#ff9d6a">！警告！</span></div>
+      <div class="rm-text">煙突を潰そうとしています。
+工場がダウングレードし、敵に爆破される可能性があります。
+煙突も終了時のポイントには加算されます。
+本当にここに建設しますか？</div>
+      <div class="rm-nav">
+        <button class="btn" id="wmNo">やめる</button>
+        <button class="btn danger" id="wmYes">建設する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="diffModal" class="rm" aria-hidden="true" role="dialog" aria-label="囲碁との違い">
+    <div class="rm-card">
+      <button class="rm-close" id="dfClose" aria-label="閉じる">×</button>
+      <div class="rm-head"><span class="rm-title">囲碁との違い</span></div>
+      <div class="rm-text" id="dfText">既に囲碁をご存じの方へ
+囲碁初学者が直感的に分かりやすいよう、以下のルールとなっています。
+・置かれた石の数を競います。（地には終局時に自動で石が置かれます）
+・「死に石」の判定は有りません。死んでいる石も取り切る必要があります。
+・いわゆる中国ルールのため、コミは7.5目です</div>
     </div>
   </div>
 </div>
@@ -409,9 +447,9 @@ function group(b, i) {
 
 // Standard Go legality: place -> remove captured enemy groups -> own group must have a liberty.
 // (The "closed vents" delay is purely visual, so a capturing move is legal even at a suicide point.)
-function tryMove(b, i, c) {
+function tryMove(b, i, c, human) {
   if (b[i] !== 0) return { ok:false, reason:'occupied' };
-  if (b === board && stackPts.get(i) === c) return { ok:false, reason:'stack' };      // the large stack of a 大型工場 stands on its own eye: its owner may not build there either
+  if (b === board && !human && stackPts.get(i) === c) return { ok:false, reason:'stack' };      // the CPU never fills the large stack of its own 大型工場 (a human may, after a warning)
   const nb = b.slice(); nb[i] = c;
   const e = 3 - c, done = new Set(), groups = [];
   for (const q of nbr[i]) {
@@ -424,7 +462,7 @@ function tryMove(b, i, c) {
   for (const gs of groups) for (const s of gs) { nb[s] = 0; captured.push(s); }
   if (group(nb, i).libs.size === 0) return { ok:false, reason:'suicide' };
   if (seen.has(nb.join(''))) return { ok:false, reason:'ko' };
-  return { ok:true, nb, captured };
+  return { ok:true, nb, captured, chim: b === board && chimPts.get(i) === c };      // chim: building on your own chimney (eye) point
 }
 
 function areaScore(b, deadSet) {
@@ -459,9 +497,9 @@ function computeLibs() {
    A chain with 2+ such eyes can never be captured -> "大型工場". ---- */
 let chimLvl = new Uint8Array(0), eyeCnt = new Uint8Array(0), bigAt = new Float64Array(0), bigChains = { 1: 0, 2: 0 };
 let prevBig = new Set(), bigEvents = [], endBig = new Set();
-let stackPts = new Map(), endStacks = new Map();      // eye points carrying a large stack (point -> colour); endStacks is frozen when the ending starts
+let stackPts = new Map(), chimPts = new Map(), endStacks = new Map();      // eye points carrying a large stack (point -> colour); endStacks is frozen when the ending starts
 function computeEyes() {
-  chimLvl = new Uint8Array(N * N * 4); eyeCnt = new Uint8Array(N * N); stackPts = new Map();
+  chimLvl = new Uint8Array(N * N * 4); eyeCnt = new Uint8Array(N * N); stackPts = new Map(); chimPts = new Map();
   const cid = new Int32Array(N * N).fill(-1), chains = [];
   for (let i = 0; i < N * N; i++) if (board[i] && cid[i] < 0) { const g = group(board, i); g.stones.forEach(s => cid[s] = chains.length); chains.push(g.stones); }
   const eyes = chains.map(() => []);
@@ -484,12 +522,12 @@ function computeEyes() {
     stones.forEach(s => eyeCnt[s] = e);
     for (const empt of eyes[ch]) {
       if (e < 2) {                                  // one eye: a short chimney on every vent facing it (the eye stays open for the opponent)
-        for (const p of empt) for (const q of nbr[p]) if (q >= 0 && board[q] === c && cid[q] === ch) chimLvl[q * 4 + nbr[q].indexOf(p)] = 1;
+        for (const p of empt) { chimPts.set(p, c); for (const q of nbr[p]) if (q >= 0 && board[q] === c && cid[q] === ch) chimLvl[q * 4 + nbr[q].indexOf(p)] = 1; }
         continue;
       }
       let mx = 0, my = 0; empt.forEach(p => { mx += p % N; my += (p / N) | 0; }); mx /= empt.length; my /= empt.length;
       const pc = empt.reduce((a, b) => Math.hypot(a % N - mx, ((a / N) | 0) - my) <= Math.hypot(b % N - mx, ((b / N) | 0) - my) ? a : b);
-      stackPts.set(pc, c);
+      stackPts.set(pc, c); chimPts.set(pc, c);
       let first = true;                              // two eyes: ONE large stack at the eye's centre, fed by pipes from the adjacent vents
       for (const q of nbr[pc]) if (q >= 0 && board[q] === c && cid[q] === ch) { chimLvl[q * 4 + nbr[q].indexOf(pc)] = first ? 3 : 2; first = false; }
     }
@@ -557,8 +595,8 @@ function logMsg(t, hot) {
 
 const SOOT_MOVES = 6;
 function ageSoot() { for (const d of decals) d.n = (d.n || 0) + 1; }      // every move (or pass) made after a blast thins its soot by one step
-function playMove(i) {
-  const r = tryMove(board, i, turn);
+function playMove(i, human) {
+  const r = tryMove(board, i, turn, human);
   if (!r.ok) return false;
   const now = performance.now(), c = turn;
   ageSoot();                                    // (soot from THIS move's own blast appears later, so it starts counting from the next move)
@@ -611,7 +649,7 @@ function startEnding() {
   if (phase !== 'play') return;
   phase = 'ending'; clearTimeout(cpuTimer); cpuTimer = 0; hover = -1; hoverInfo = null; hoverGroup = null;
   endBig = new Set(prevBig);                              // 大型工場 keep their armour while the territory is being filled in
-  endStacks = new Map(stackPts);                          // the large stacks stay standing (no factory is built there) but still score a point
+  endStacks = new Map(chimPts);                           // every chimney (small or large) stays standing: no factory is built there, but it still scores a point
   const area = areaScore(board, new Set()), order = { 1: [], 2: [] };
   for (const c of [1, 2]) {
     const terr = new Set(); for (let i = 0; i < N * N; i++) if (!board[i] && area.owner[i] === c) terr.add(i);
@@ -1897,10 +1935,8 @@ let lastHint = '';
 function hintHTML(now) {
   if (phase === 'over') return 'この対局は終了した。「新規対局」で再び工場を建てよう。';
   if (phase === 'ending') {
-    let a = 0, b = 0; for (let i = 0; i < N * N; i++) { if (board[i] === 1) a++; else if (board[i] === 2) b++; }
-    for (const c of endStacks.values()) { if (c === 1) a++; else b++; }
     if (ending && ending.step === 'drum') return '<span class="good">集計中… 勝敗やいかに！</span>';
-    return `<span class="good">終局！囲んだ空き地に工場を自動建設中…<br>黒 <b>${a}</b> 基 ／ 白 <b>${b}</b> 基（後手ハンデ +${KOMI}）</span>`;
+    return `<span class="good">終局！囲んだ空き地に工場を自動建設中…<br>（後手ハンデ +${KOMI}）</span>`;
   }
   if (now < lockUntil) return bigEvents.length ? '<span class="good">大型工場が完成した！</span>' : '<span class="good">工場を暖機中… 排気口はまだ閉じている。</span>';
   if (phase === 'select') return '先手（黒）か後手（白）を選んで対戦を始めよう。';
@@ -1912,10 +1948,10 @@ function hintHTML(now) {
   if (hover >= 0 && hoverInfo) {
     const tapNote = pending >= 0 && hover === pending ? '<br><span class="good">もう一度タップすると建設を確定します。</span>' : '';
     if (hoverInfo.ok) {
+      if (hoverInfo.chim) return `<span class="bad">煙突を潰す手。建設前に確認が表示される。</span><br>（煙突もポイントに加算されるので工場は建てなくても大丈夫！）${tapNote}`;
       if (hoverInfo.captured.length) return `<span class="good">${coord(hover)}：相手の排気口を塞ぎ <b>${hoverInfo.captured.length}</b> 基を爆破できる！</span><br>相手工場爆破後に排気口が確保されるため建設可能${tapNote}`;
       return `${coord(hover)} に工場を建設できる。${tapNote}`;
     }
-    if (hoverInfo.reason === 'stack') return '<span class="bad">建設不可。煙突を潰すと大工場ではなくなってしまう。</span><br>（煙突もポイントに加算されるので工場は建てなくても大丈夫！）';
     if (hoverInfo.reason === 'suicide') return '<span class="bad">建設不可：排気口が確保できない場所には建設できない（相手の工場を爆破できる場合は除く）</span>';
     if (hoverInfo.reason === 'ko') return '<span class="bad">着手禁止（コウ）：直前と同じ盤面に戻ってしまう。</span>';
   }
@@ -1923,7 +1959,7 @@ function hintHTML(now) {
 }
 /* ---- score = number of working factories, shown on mechanical roller counters (PC plates + phone top bar) */
 class Dial {
-  constructor(el) { this.el = el; this.v = -1; this.cols = []; this.digits = 0; }
+  constructor(el) { this.el = el; this.v = -1; this.cols = []; this.digits = 0; this.timer = 0; }
   build(digits) {
     this.el.innerHTML = ''; this.cols = []; this.digits = digits;
     for (let k = 0; k < digits; k++) {
@@ -1954,14 +1990,23 @@ class Dial {
     }
     b.innerHTML = h; this.el.appendChild(b); setTimeout(() => b.remove(), 1500);
   }
+  spin(on, digits) {                // the drums keep whirling like a slot machine until the result is announced
+    if (on) {
+      if (digits !== this.digits) this.build(digits);
+      if (this.timer) return;
+      const tick = () => this.cols.forEach(ds => { ds.style.transition = 'transform .1s linear'; ds.style.transform = `translateY(${-Math.floor(Math.random() * 10) * 1.18}em)`; });
+      tick(); this.timer = setInterval(tick, 105); this.v = null;
+    } else if (this.timer) { clearInterval(this.timer); this.timer = 0; this.cols.forEach(ds => ds.style.transition = ''); }
+  }
   set(n, digits) {
+    if (this.timer) return;
     if (digits !== this.digits) this.build(digits);
     if (n === this.v) return;
     const old = this.v, str = String(n).padStart(this.digits, '0');
     if (old < 0) this.cols.forEach(ds => ds.style.transition = 'none');           // first value: no roll
     this.cols.forEach((ds, k) => ds.style.transform = `translateY(${-(+str[k]) * 1.18}em)`);
     if (old < 0) { void this.el.offsetWidth; this.cols.forEach(ds => ds.style.transition = ''); }
-    else { this.el.classList.remove('up', 'down'); void this.el.offsetWidth; this.el.classList.add(n > old ? 'up' : 'down'); if (n < old) this.boom(old - n); }
+    else if (old !== null) { this.el.classList.remove('up', 'down'); void this.el.offsetWidth; this.el.classList.add(n > old ? 'up' : 'down'); if (n < old) this.boom(old - n); }
     this.v = n;
   }
 }
@@ -1971,7 +2016,7 @@ function updateScores(now) {          // stones still waiting to blow up count u
   for (const d of dying) if (now < d.explodeAt) n[d.color]++;
   if (phase === 'ending' || phase === 'over') for (const c of endStacks.values()) n[c]++;     // standing stacks count as a point
   const digits = String(N * N).length;
-  for (const c of [1, 2]) dials[c].forEach(d => d.set(n[c], digits));
+  for (const c of [1, 2]) dials[c].forEach(d => { if (phase === 'ending') d.spin(true, digits); else { d.spin(false); d.set(n[c], digits); } });      // spin while the territory is being filled in
 }
 function updateUI() {
   if (pending >= 0 && (phase !== 'play' || isCpuTurn() || board[pending])) pending = -1;      // the tentative stone is dropped when the turn or the game changes
@@ -1987,7 +2032,7 @@ function updateUI() {
   const cpuTurn = isCpuTurn();
   $('#nm1').textContent = '黒の工場' + (vs === '2p' ? '' : human === 1 ? '（あなた）' : '（CPU）');
   $('#nm2').textContent = '白の工場' + (vs === '2p' ? '' : human === 2 ? '（あなた）' : '（CPU）');
-  $('#btnPass').disabled = phase !== 'play' || cpuTurn;
+  $('#btnPass').disabled = $('#btnPassP').disabled = phase !== 'play' || cpuTurn;
 }
 
 /* ------------------------------------------------------------- input */
@@ -2003,7 +2048,7 @@ function setHover(i) {
   hover = i; hoverInfo = null; hoverGroup = null;
   if (i < 0 || phase !== 'play') return;
   if (board[i]) { const g = group(board, i); hoverGroup = { color: board[i], stones: g.stones, libs: g.libs }; }
-  else hoverInfo = tryMove(board, i, turn);
+  else hoverInfo = tryMove(board, i, turn, true);
 }
 /* phone UI: the first tap only places a ghost factory (a tentative stone), tapping the same point again builds it; tapping another point moves the ghost */
 let pending = -1, ptrType = 'mouse';
@@ -2011,6 +2056,15 @@ const twoTap = () => innerWidth < 920 && ptrType !== 'mouse' && $('#chkTap').che
 cv.addEventListener('pointermove', e => { ptrType = e.pointerType; if (pending >= 0 && e.pointerType !== 'mouse' && !e.buttons) return; setHover(idxFromEvent(e)); });
 cv.addEventListener('pointerleave', e => { if (pending >= 0 && e.pointerType !== 'mouse') return; setHover(-1); });
 cv.addEventListener('pointerdown', e => { ptrType = e.pointerType; if (e.pointerType !== 'mouse') setHover(idxFromEvent(e)); });
+const wm = $('#warnModal');
+function askChimney(onYes, onNo) {                  // confirm before the owner builds on their own chimney
+  const done = f => { wm.classList.remove('open'); wm.setAttribute('aria-hidden', 'true'); wm._cb = null; f(); };
+  wm._cb = { yes: () => done(onYes), no: () => done(onNo) };
+  wm.classList.add('open'); wm.setAttribute('aria-hidden', 'false');
+}
+$('#wmYes').onclick = () => wm._cb && wm._cb.yes();
+$('#wmNo').onclick = () => wm._cb && wm._cb.no();
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && wm._cb) wm._cb.no(); });
 cv.addEventListener('click', e => {
   ac();
   const i = idxFromEvent(e); if (i < 0) return;
@@ -2021,10 +2075,12 @@ cv.addEventListener('click', e => {
   }
   pending = -1;
   setHover(-1); hover = -2;
-  if (!playMove(i)) { hoverInfo = null; }
-  hover = -1; setHover(i);
+  const go = () => { if (!playMove(i, true)) { hoverInfo = null; } hover = -1; setHover(i); };
+  const chk = !board[i] && tryMove(board, i, turn, true);
+  if (chk && chk.ok && chk.chim) { hover = -1; askChimney(go, () => { hover = -1; setHover(i); }); return; }
+  go();
 });
-$('#btnPass').onclick = () => { ac(); if (performance.now() >= lockUntil) doPass(); };
+$('#btnPass').onclick = $('#btnPassP').onclick = () => { ac(); if (performance.now() >= lockUntil) doPass(); };
 $('#btnNew').onclick = () => { if (phase === 'over' || phase === 'ending' || moveNo === 0 || confirm('現在の対局を破棄して新しく始めますか？')) newGame(); };
 $('#btnBanner').onclick = newGame;
 $('#btnView').onclick = () => { const mini = $('#banner').classList.toggle('mini'); $('#btnView').textContent = mini ? '結果を見る' : '盤面を見る'; };
@@ -2091,7 +2147,11 @@ const RULE_SLIDES = [
   const close = () => { modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); dropFrame(); };
   const next = () => { if (cur >= RULE_SLIDES.length - 1) close(); else show(cur + 1, 1); };
   const prev = () => show(cur - 1, -1);
-  $('#btnRules').onclick = open; $('#rmClose').onclick = close; $('#rmNext').onclick = next; $('#rmPrev').onclick = prev;
+  $('#btnRules').onclick = open; $('#btnRulesStart').onclick = open;
+  const dfm = $('#diffModal'), dfOpen = () => { dfm.classList.add('open'); dfm.setAttribute('aria-hidden', 'false'); }, dfClose = () => { dfm.classList.remove('open'); dfm.setAttribute('aria-hidden', 'true'); };
+  $('#btnDiff').onclick = dfOpen; $('#btnDiffStart').onclick = dfOpen; $('#dfClose').onclick = dfClose;
+  dfm.addEventListener('click', e => { if (e.target === dfm) dfClose(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && dfm.classList.contains('open')) dfClose(); }); $('#rmClose').onclick = close; $('#rmNext').onclick = next; $('#rmPrev').onclick = prev;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => {
     if (!modal.classList.contains('open')) return;
