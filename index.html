@@ -306,7 +306,7 @@ body.demo #banner .bnbtns{display:none}
       <span>盤の大きさ</span>
       <select id="selSize"><option value="9" selected>9 × 9</option><option value="13">13 × 13</option><option value="19">19 × 19</option></select>
       <span>相手</span>
-      <select id="selLv"><option value="1" selected>見習いCPU（弱い）</option><option value="2">職人CPU（ふつう）</option><option value="3">親方CPU（強い）</option><option value="h">両方人間が操作（ローカル対戦用）</option></select>
+      <select id="selLv"><option value="1" selected>見習いCPU（弱い）</option><option value="2">職人CPU（ふつう）</option><option value="3">親方CPU（強い）</option><option value="4">名匠CPU（とても強い）</option><option value="h">両方人間が操作（ローカル対戦用）</option></select>
       <div class="chkRow">
         <label class="chk"><input type="checkbox" id="chkSound" checked> 効果音</label>
         <label class="chk chkTap"><input type="checkbox" id="chkTap" checked> 仮置き</label>
@@ -520,7 +520,7 @@ function newMeta(now) {
   };
 }
 function newGame() {
-  clearTimeout(cpuTimer); cpuTimer = 0;
+  clearTimeout(cpuTimer); cpuTimer = 0; mctsReq++;
   nbr = buildNbr(N);
   board = new Uint8Array(N*N); meta = new Array(N*N).fill(null);
   turn = 1; caps = {1:0, 2:0}; seen = new Set([board.join('')]);
@@ -673,9 +673,95 @@ function finish(title, text) {
   updateUI();
 }
 
+/* ------------------------------------------------------------- CPU level 4 (名匠): Monte Carlo tree search in Web Workers */
+let mctsReq = 0, mctsWorkers = [];
+function mctsInit() {
+  if (mctsWorkers.length) return;
+  const url = URL.createObjectURL(new Blob([document.getElementById('mctsSrc').textContent], { type: 'text/javascript' }));
+  const nw = window.__mctsWorkers || Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1));
+  for (let k = 0; k < nw; k++) mctsWorkers.push(new Worker(url));
+}
+function mctsSearch(msg) {                      // every worker searches independently; the visit counts are added up per move
+  mctsInit();
+  return Promise.all(mctsWorkers.map((w, k) => new Promise((ok, no) => {
+    w.onmessage = e => (e.data.error ? no(new Error(e.data.error)) : ok(e.data)); w.onerror = e => no(new Error(e.message));
+    w.postMessage({ ...msg, seed: (Date.now() * 7919 + k * 104729) >>> 0 });
+  }))).then(rs => {
+    const tot = new Map(); let playouts = 0;
+    for (const r of rs) { playouts += r.playouts; for (const m of r.ranked) { const t = tot.get(m.move) || { move: m.move, n: 0, w: 0 }; t.n += m.n; t.w += m.wr * m.n; tot.set(m.move, t); } }
+    return { ranked: [...tot.values()].sort((a, b) => b.n - a.n).map(t => ({ move: t.move, n: t.n, wr: t.n ? t.w / t.n : 0 })), playouts };
+  });
+}
+function mctsMs() { return N <= 9 ? 2500 : N <= 13 ? 3500 : 5000; }
+function cpuMoveMcts() {
+  const c = turn, id = ++mctsReq, snapMoves = moveNo;
+  if (moveNo > N * N * 1.6) { doPass(); return Promise.resolve(); }
+  cpuTimer = -1;                                // "busy": keeps the frame loop from asking for another move
+  const cand = [];
+  for (let i = 0; i < N * N; i++) if (!board[i]) { const r = tryMove(board, i, c); if (r.ok) { const libs = group(r.nb, i).libs.size; let resc = false; for (const q of nbr[i]) if (q >= 0 && board[q] === c && libs > 1 && group(board, q).libs.size === 1) resc = true; cand.push({ i, cap: r.captured.length, libs, resc }); } }
+  const blocked = blockedInvasions(cand, c);                     // no walking into enemy territory that cannot hold two eyes
+  const legal = cand.filter(x => !blocked.has(x.i)).map(x => x.i);
+  if (!legal.length) {                                           // nothing sensible left: the usual guard, otherwise pass
+    cpuTimer = 0;
+    const pm = noPassMove(cand, c);
+    if (pm >= 0 && playMove(pm)) return Promise.resolve();
+    doPass(); return Promise.resolve();
+  }
+  const msg = { N, board: Array.from(board), turn: c, komi: KOMI, last: lastMove, passes, rootMoves: legal, allowPass: passes > 0, ms: window.__mctsMs || mctsMs(), maxPlayouts: window.__mctsMax || 0, moveNo, opts: window.__mctsOpts || null };
+  return mctsSearch(msg).then(res => {
+    if (id !== mctsReq || phase !== 'play' || turn !== c || moveNo !== snapMoves) return;     // the game moved on (new game, level change, ...)
+    cpuTimer = 0;
+    const moves = res.ranked.filter(m => m.move >= 0), pass = res.ranked.find(m => m.move < 0);
+    window.__lastMcts = { top: res.ranked.slice(0, 4).map(m => [m.move, m.n, +m.wr.toFixed(3)]), playouts: res.playouts };
+    // the opponent has just passed and passing is as good as any move: finish the game (unless the usual guard finds useful work)
+    if (moves.length && moves[0].wr < 0.06 && !(passes > 0 && pass)) {          // the game is lost: no more fighting for nothing, only captures and rescues
+      for (const m of moves) { const cd = cand.find(x => x.i === m.move); if (cd && (cd.cap > 0 || cd.resc) && playMove(m.move)) return; }
+      const pm2 = noPassMove(cand, c, false);
+      if (pm2 >= 0 && playMove(pm2)) return;
+      doPass(); return;
+    }
+    const wantPass = passes > 0 && pass && (!moves.length || pass.wr >= moves[0].wr - 0.02);
+    if (!wantPass) for (const m of moves) {
+      if (wasteMove(m.move, c, cand)) continue;                  // never fill its own territory for nothing
+      if (playMove(m.move)) { lastMctsInfo = { playouts: res.playouts, wr: m.wr }; return; }
+    }
+    const pm = noPassMove(cand, c);                              // the usual "do not pass while there is useful work" rule
+    if (pm >= 0 && playMove(pm)) return;
+    doPass();
+  }).catch(err => { console.error(err); if (id === mctsReq) { cpuTimer = 0; mctsReq++; cpuLevel = 3; logMsg('名匠CPUの計算に失敗したため、親方CPUに切り替えました。'); $('#selLv').value = '3'; } });
+}
+let lastMctsInfo = null;
+/* The same invasion check the older CPUs use: a move inside an enemy territory is dropped when that territory is too narrow / too small for two eyes
+   (see invadable), unless it captures something or saves one of our own chains from atari, or is not a self-atari. */
+function blockedInvasions(cand, c) {
+  const e = 3 - c, { regions, terrOf } = territoriesOf(e, 3), out = new Set();
+  for (const cd of cand) {
+    const ri = terrOf[cd.i]; if (ri < 0 || cd.cap > 0) continue;
+    if (cd.resc) continue;
+    if (!regions[ri].ok || cd.libs < 2 || failBlocked(cd.i)) out.add(cd.i);
+  }
+  for (const cd of cand) {                                        // a lone stone dropped among enemy stones with no friend within two steps cannot make two eyes either
+    if (out.has(cd.i) || cd.cap > 0 || cd.resc) continue;
+    let own = 0, foe = 0, x = cd.i % N, y = (cd.i / N) | 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (Math.abs(dx) + Math.abs(dy) > 2 || (!dx && !dy)) continue;
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= N || yy >= N) continue;
+      const v = board[yy * N + xx]; if (v === c) own++; else if (v === e) foe++;
+    }
+    if (own === 0 && foe >= 2) out.add(cd.i);
+  }
+  return out;
+}
+function wasteMove(p, c, cand) {                // a stone inside an empty area that only we border: it scores nothing (area scoring) and wastes a factory
+  const e = 3 - c, cd = cand.find(x => x.i === p); if (cd && cd.cap > 0) return false;
+  const { col } = regionBorder(board, p);
+  return col.has(c) && !col.has(e);
+}
+
 /* ------------------------------------------------------------- CPU (simple) */
 let cpuLevel = 1;   // 1 = apprentice, 2 = craftsman, 3 = master
 function cpuMove() {
+  if (cpuLevel === 4) return cpuMoveMcts();
   const c = turn, e = 3 - c, lv = cpuLevel;
   const cand = [];
   for (let i = 0; i < N*N; i++) {
@@ -763,7 +849,10 @@ function regionBorder(b, p) {                 // the empty region around p and t
   while (st.length) { const a = st.pop(); for (const q of nbr[a]) { if (q < 0) continue; if (!b[q]) { if (!reg.has(q)) { reg.add(q); st.push(q); } } else col.add(b[q]); } }
   return { reg, col };
 }
-function noPassMove(cand, c) {
+function ownOnlyEmpty(p, c) {                    // p lies in an empty area that only our colour borders: our territory, which scores whether or not we play there
+  const { col } = regionBorder(board, p); return col.has(c) && !col.has(3 - c);
+}
+function noPassMove(cand, c, allowLive = true) {
   if (moveNo > N * N * 1.6) return -1;        // hard stop so a game can always finish
   const e = 3 - c, byIdx = new Map(cand.map(x => [x.i, x]));
   const alive = new Set(), weak = [], seenS = new Set();
@@ -786,9 +875,10 @@ function noPassMove(cand, c) {
   }
   if (best) return best.i;
   // (2) chains that are not alive: try to make eyes / liberties until they are captured
-  if (!weak.length) return -1;
+  if (!weak.length || !allowLive) return -1;
   best = null;
   for (const cd of cand) {
+    if (passes === 1 && cd.cap === 0 && ownOnlyEmpty(cd.i, c)) continue;             // the opponent has passed: nothing inside our own territory changes the score
     const r = tryMove(board, cd.i, c); if (!r.ok) continue;
     let gain = cd.cap * 6, touch = false;
     for (const w of weak) {
@@ -853,7 +943,7 @@ function failBlocked(p) { return invFail.some(f => f.i === p); }
 function moveAfterPlayerPass(cand, c, lv) {
   if (moveNo > N * N * 1.6) return -1;
   const e = 3 - c;
-  const must = cand.filter(x => x.cap > 0 || x.resc).sort((a, b) => b.s - a.s);
+  const must = cand.filter(x => x.cap > 0 || (x.resc && !ownOnlyEmpty(x.i, c))).sort((a, b) => b.s - a.s);
   if (must.length) return must[0].i;
   const byIdx = new Map(cand.map(x => [x.i, x])), { regions } = territoriesOf(e, lv);
   let best = null;
@@ -2071,10 +2161,307 @@ if (DEMO && DEMO !== 'free') {
 }
 
 // expose for debugging / automated checks
-window.__game = { noPassTry(c) { const cand = []; for (let i = 0; i < N * N; i++) { if (board[i]) continue; const r = tryMove(board, i, c); if (r.ok) cand.push({ i, cap: r.captured.length }); } return noPassMove(cand, c); }, eyesIn, weakChains(c) { const out = [], seenS = new Set(); for (let i = 0; i < N * N; i++) { if (board[i] !== c || seenS.has(i)) continue; const g = group(board, i); g.stones.forEach(x => seenS.add(x)); if (eyesIn(board, i) < 2) out.push(g.stones); } return out; }, setCrop(c) { FREE_CROP = c; layout(); }, get cvRect() { const r = cv.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }, advLocked(ms) { const base = Math.max(performance.now(), lockUntil + 1); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
+window.__game = { ownOnly: ownOnlyEmpty, noPassTry(c) { const cand = []; for (let i = 0; i < N * N; i++) { if (board[i]) continue; const r = tryMove(board, i, c); if (r.ok) cand.push({ i, cap: r.captured.length }); } return noPassMove(cand, c); }, eyesIn, weakChains(c) { const out = [], seenS = new Set(); for (let i = 0; i < N * N; i++) { if (board[i] !== c || seenS.has(i)) continue; const g = group(board, i); g.stones.forEach(x => seenS.add(x)); if (eyesIn(board, i) < 2) out.push(g.stones); } return out; }, setCrop(c) { FREE_CROP = c; layout(); }, get cvRect() { const r = cv.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; }, advLocked(ms) { const base = Math.max(performance.now(), lockUntil + 1); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
   adv(ms) { const base = performance.now(); for (let t = 0; t <= ms; t += 33) { tickEnding(base + t); update(base + t, .033); } render(base + ms, .033); },
   hoverAt(i) { hover = -1; setHover(i); }, get cs() { return cs; }, get M() { return M; }, get S() { return S; }, get dpr() { return dpr; }, failPush(i) { invFail.push({ i, at: moveNo }); }, failBlocked, get haze() { return hazeCur; }, updateHaze, setLv(v) { cpuLevel = v; }, get chimLvl() { return chimLvl; }, get eyeCnt() { return eyeCnt; }, get meta() { return meta; }, startAs, startEnding, tickEnding, reveal, get ending() { return ending; }, cpuMove, get cpuTimer() { return cpuTimer; }, get lock() { return lockUntil; }, get phase() { return phase; }, get board() { return board; }, playMove, doPass, tryMove, get turn() { return turn; }, set vs(v) { vs = v; }, get N() { return N; }, get caps() { return caps; }, setN(n){ N = n; newGame(); } };
 })();
+</script>
+<script type="text/plain" id="mctsSrc">
+<!--MCTS-BEGIN-->
+'use strict';
+/* MCTS Go engine (UCT + RAVE) for FACTORY-GO. Runs inside a Web Worker.
+   Rules: area scoring (stones + territory), komi from the message, no suicide, simple ko in the tree / playouts (the game itself enforces superko at the root).
+   message in : { id, N, board:[0/1/2...], turn, komi, last, passes, rootMoves:[legal points], allowPass, ms, maxPlayouts, seed, moveNo }
+   message out: { id, ranked:[{move,n,wr}], playouts, ms, value }   (move = -1 means pass)                                              */
+const BLACK = 1, WHITE = 2, PASS = -1;
+let N = 9, NN = 81, NB = null, DG = null;
+
+function setup(n) {
+  N = n; NN = n * n; NB = new Int16Array(NN * 4).fill(-1); DG = new Int16Array(NN * 4).fill(-1);
+  for (let p = 0; p < NN; p++) {
+    const x = p % N, y = (p / N) | 0;
+    if (x > 0) NB[p * 4] = p - 1; if (x < N - 1) NB[p * 4 + 1] = p + 1; if (y > 0) NB[p * 4 + 2] = p - N; if (y < N - 1) NB[p * 4 + 3] = p + N;
+    if (x > 0 && y > 0) DG[p * 4] = p - N - 1; if (x < N - 1 && y > 0) DG[p * 4 + 1] = p - N + 1;
+    if (x > 0 && y < N - 1) DG[p * 4 + 2] = p + N - 1; if (x < N - 1 && y < N - 1) DG[p * 4 + 3] = p + N + 1;
+  }
+}
+let seed = 2463534242;
+function rnd32() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return seed >>> 0; }
+const rint = n => rnd32() % n;
+
+class State {
+  constructor() {
+    this.b = new Int8Array(NN); this.ko = -1; this.last = -1; this.passes = 0; this.n = 0;
+    this.mark = new Int32Array(NN); this.stamp = 0; this.stack = new Int16Array(NN + 4); this.grp = new Int16Array(NN + 4);
+    this.gn = 0; this.glibs = 0; this.lib1 = -1; this.lmark = new Int32Array(NN); this.lstamp = 0;
+    this.loc = new Int16Array(8); this.em = new Int16Array(NN); this.ep = new Int16Array(NN); this.ec = 0;      // list of empty points (for fast random picks)
+  }
+  rebuild() { this.ec = 0; for (let p = 0; p < NN; p++) { if (this.b[p] === 0) { this.em[this.ec] = p; this.ep[p] = this.ec++; } else this.ep[p] = -1; } }
+  addE(p) { this.ep[p] = this.ec; this.em[this.ec++] = p; }
+  delE(p) { const i = this.ep[p], l = this.em[--this.ec]; this.em[i] = l; this.ep[l] = i; this.ep[p] = -1; }
+  copy(o) { this.b.set(o.b); this.ko = o.ko; this.last = o.last; this.passes = o.passes; this.n = o.n; this.rebuild(); }
+  /* flood fill of the group at p: stones in grp[0..gn), number of distinct liberties in glibs, one liberty in lib1 */
+  group(p) {
+    const b = this.b, c = b[p], st = this.stack, grp = this.grp, mark = this.mark, lm = this.lmark;
+    const s = ++this.stamp, ls = ++this.lstamp; let sp = 0, gn = 0, libs = 0, lib1 = -1;
+    st[sp++] = p; mark[p] = s;
+    while (sp) {
+      const q = st[--sp]; grp[gn++] = q;
+      for (let k = 0; k < 4; k++) {
+        const r = NB[q * 4 + k]; if (r < 0) continue; const v = b[r];
+        if (v === 0) { if (lm[r] !== ls) { lm[r] = ls; libs++; lib1 = r; } }
+        else if (v === c && mark[r] !== s) { mark[r] = s; st[sp++] = r; }
+      }
+    }
+    this.gn = gn; this.glibs = libs; this.lib1 = lib1; return libs;
+  }
+  libsUpTo(p, limit) {
+    const b = this.b, c = b[p], st = this.stack, mark = this.mark, lm = this.lmark;
+    const s = ++this.stamp, ls = ++this.lstamp; let sp = 0, libs = 0;
+    st[sp++] = p; mark[p] = s;
+    while (sp) {
+      const q = st[--sp];
+      for (let k = 0; k < 4; k++) {
+        const r = NB[q * 4 + k]; if (r < 0) continue; const v = b[r];
+        if (v === 0) { if (lm[r] !== ls) { lm[r] = ls; libs++; this.lib1 = r; if (libs >= limit) return libs; } }
+        else if (v === c && mark[r] !== s) { mark[r] = s; st[sp++] = r; }
+      }
+    }
+    return libs;
+  }
+  play(p, c) {
+    const b = this.b; if (b[p] !== 0 || p === this.ko) return false;
+    const e = 3 - c; b[p] = c; this.delE(p); let cap = 0, capAt = -1;
+    for (let k = 0; k < 4; k++) {
+      const q = NB[p * 4 + k]; if (q < 0 || b[q] !== e) continue;
+      if (this.libsUpTo(q, 1) === 0) {
+        this.group(q);
+        for (let i = 0; i < this.gn; i++) { const r = this.grp[i]; b[r] = 0; this.addE(r); }
+        cap += this.gn; capAt = q;
+      }
+    }
+    let empt = 0, fr = 0;
+    for (let k = 0; k < 4; k++) { const q = NB[p * 4 + k]; if (q < 0) continue; const v = b[q]; if (v === 0) empt++; else if (v === c) fr++; }
+    if (empt === 0 && this.libsUpTo(p, 1) === 0) { b[p] = 0; this.addE(p); return false; }          // suicide
+    this.ko = (cap === 1 && fr === 0 && empt === 1) ? capAt : -1;
+    this.last = p; this.passes = 0; this.n++; return true;
+  }
+  pass() { this.ko = -1; this.last = -1; this.passes++; this.n++; }
+  isEye(p, c) {                                   // a point enclosed by one colour on all sides, with enough friendly diagonals (a "true" eye)
+    const b = this.b;
+    for (let k = 0; k < 4; k++) { const q = NB[p * 4 + k]; if (q >= 0 && b[q] !== c) return false; }
+    let own = 0, off = 0;
+    for (let k = 0; k < 4; k++) { const d = DG[p * 4 + k]; if (d < 0) off++; else if (b[d] === c) own++; }
+    return off > 0 ? own === 4 - off : own >= 3;
+  }
+  legalCheap(p, c) {
+    const b = this.b; if (b[p] !== 0 || p === this.ko) return false;
+    for (let k = 0; k < 4; k++) { const q = NB[p * 4 + k]; if (q >= 0 && b[q] === 0) return true; }
+    for (let k = 0; k < 4; k++) {
+      const q = NB[p * 4 + k]; if (q < 0) continue;
+      if (b[q] === c) { if (this.libsUpTo(q, 2) >= 2) return true; } else if (this.libsUpTo(q, 2) === 1) return true;      // a friend with a spare liberty, or an enemy we capture
+    }
+    return false;
+  }
+  emptyNb(p) { let n = 0; for (let k = 0; k < 4; k++) { const q = NB[p * 4 + k]; if (q >= 0 && this.b[q] === 0) n++; } return n; }
+  /* playout move choice: capture / escape next to the last move, then a random legal point that does not fill an own eye */
+  pick(c) {
+    const b = this.b, e = 3 - c, L = this.last;
+    if (L >= 0) {
+      let m = 0; const loc = this.loc;
+      if (b[L] === e && this.libsUpTo(L, 2) === 1) { const p = this.lib1; if (this.legalCheap(p, c)) loc[m++] = p; }           // capture the stone we just saw
+      for (let k = 0; k < 4; k++) {
+        const q = NB[L * 4 + k]; if (q < 0) continue; const v = b[q];
+        if (v === c) { if (this.libsUpTo(q, 2) === 1) { const p = this.lib1; if (this.emptyNb(p) >= 2 && this.legalCheap(p, c)) loc[m++] = p; } }   // run away from atari
+        else if (v === e && q !== L) { if (this.libsUpTo(q, 2) === 1) { const p = this.lib1; if (this.legalCheap(p, c)) loc[m++] = p; } }
+      }
+      if (m && rint(10) < 9) return loc[rint(m)];
+      if (P.LGR) {                                                                        // last good reply
+        const r = LGRT[(c - 1) * (NN + 1) + L];
+        if (r >= 0 && b[r] === 0 && r !== this.ko && !this.isEye(r, c) && this.legalCheap(r, c) && !this.selfAtari(r, c)) return r;
+      }
+    }
+    const ko = this.ko, ec = this.ec, em = this.em;
+    if (ec === 0) return -1;
+    for (let t = 0; t < 10; t++) {
+      const p = em[rint(ec)];
+      if (p === ko || this.isEye(p, c)) continue;
+      if (this.legalCheap(p, c) && !this.selfAtari(p, c)) return p;
+    }
+    const start = rint(ec);
+    for (let i = 0; i < ec; i++) {
+      let j = start + i; if (j >= ec) j -= ec; const p = em[j];
+      if (p === ko || this.isEye(p, c)) continue;
+      if (this.legalCheap(p, c)) return p;
+    }
+    return -1;
+  }
+  selfAtari(p, c) {                               // would a stone at p (joined to its friends) end up with fewer than two liberties? (captures are not considered)
+    const b = this.b; let free = 0, friend = 0;
+    for (let k = 0; k < 4; k++) { const q = NB[p * 4 + k]; if (q < 0) continue; const v = b[q]; if (v === 0) free++; else if (v === c) friend++; }
+    if (free >= 2) return false;
+    if (friend === 0) return true;                                    // a lone stone with at most one liberty
+    let libs = free;
+    for (let k = 0; k < 4; k++) {
+      const q = NB[p * 4 + k]; if (q < 0 || b[q] !== c) continue;
+      libs += this.libsUpTo(q, 3) - 1;                                // minus p itself (shared liberties may be counted twice: slightly optimistic)
+      if (libs >= 2) return false;
+    }
+    return libs < 2;
+  }
+}
+
+const scoreMark = () => new Int32Array(NN);
+let smark = null, sstamp = 0, sstack = null;
+function areaMargin(b) {                          // black area - white area
+  if (!smark || smark.length !== NN) { smark = scoreMark(); sstack = new Int16Array(NN + 4); sstamp = 0; }
+  let bs = 0, ws = 0; const s = ++sstamp;
+  for (let p = 0; p < NN; p++) {
+    const v = b[p];
+    if (v === BLACK) bs++; else if (v === WHITE) ws++;
+    else if (smark[p] !== s) {
+      let sp = 0, size = 0, tb = false, tw = false; sstack[sp++] = p; smark[p] = s;
+      while (sp) {
+        const q = sstack[--sp]; size++;
+        for (let k = 0; k < 4; k++) {
+          const r = NB[q * 4 + k]; if (r < 0) continue; const u = b[r];
+          if (u === 0) { if (smark[r] !== s) { smark[r] = s; sstack[sp++] = r; } } else if (u === BLACK) tb = true; else tw = true;
+        }
+      }
+      if (tb && !tw) bs += size; else if (tw && !tb) ws += size;
+    }
+  }
+  return bs - ws;
+}
+
+class Node {
+  constructor(move, player, parent, prior) {
+    this.move = move; this.player = player; this.parent = parent; this.prior = prior;
+    this.n = 0; this.w = 0; this.rn = 0; this.rw = 0; this.kids = null; this.dead = false;
+  }
+}
+
+const P = { C: 0.1, K: 700, BIAS: 0.35, EXPAND: 4, LGR: 1 };            // tuning knobs (LGR = last-good-reply memory in the playouts)
+let LGRT = null;                                   // LGRT[(colour-1)*(NN+1) + previousMove] = the reply that last won
+
+/* prior score of a candidate move for the colour to play (roughly -1 .. 1) */
+function priorScore(s, p, c, moveNo) {
+  const b = s.b, e = 3 - c; let sc = 0, capture = false, rescue = false;
+  const x = p % N, y = (p / N) | 0, line = Math.min(x, y, N - 1 - x, N - 1 - y);
+  for (let k = 0; k < 4; k++) {
+    const q = NB[p * 4 + k]; if (q < 0) continue;
+    if (b[q] === e && s.group(q) === 1) { capture = true; sc += 0.55 + Math.min(s.gn, 6) * 0.04; }
+    else if (b[q] === c && s.group(q) === 1) { rescue = true; sc += 0.35; }
+  }
+  if (!capture && s.selfAtari(p, c)) sc -= 0.8;
+  if (s.last >= 0) { const d = Math.abs(s.last % N - x) + Math.abs(((s.last / N) | 0) - y); if (d <= 2) sc += 0.18; else if (d <= 4) sc += 0.05; }
+  if (line === 0) sc -= moveNo < 40 ? 0.45 : 0.15; else if (line === 1) sc -= moveNo < 20 ? 0.1 : 0; else if (line >= 2) sc += 0.12;
+  let near = false;
+  for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < N && yy < N && b[yy * N + xx]) { near = true; break; } }
+  if (!near && moveNo > 8) sc -= 0.25;
+  return Math.max(-1, Math.min(1, sc));
+}
+
+function expand(node, s, toMove, moveNo, rootMoves, allowPass) {
+  const kids = []; const e = 3 - toMove;
+  for (let p = 0; p < NN; p++) {
+    if (s.b[p] !== 0 || p === s.ko) continue;
+    if (rootMoves && !rootMoves.has(p)) continue;
+    if (s.isEye(p, toMove)) continue;
+    if (!rootMoves && !s.legalCheap(p, toMove)) continue;
+    kids.push(new Node(p, toMove, node, priorScore(s, p, toMove, moveNo + s.n)));
+  }
+  if (allowPass) kids.push(new Node(PASS, toMove, node, -0.2));
+  node.kids = kids;
+}
+
+function rawBench(msg) {                         // random playouts only (no tree): speed and average length
+  setup(msg.N); seed = 99991; const root = new State(); for (let i = 0; i < NN; i++) root.b[i] = msg.board[i]; root.rebuild();
+  const s = new State(); const t0 = Date.now(); let moves = 0, bw = 0, cnt = 0;
+  while (Date.now() - t0 < msg.ms) {
+    s.copy(root); let c = msg.turn; const cap = NN * 2;
+    while (s.passes < 2 && s.n < cap) { const p = s.pick(c); if (p < 0) s.pass(); else s.play(p, c); c = 3 - c; moves++; }
+    if (areaMargin(s.b) - msg.komi > 0) bw++; cnt++;
+  }
+  return { id: msg.id, raw: true, playouts: cnt, ms: Date.now() - t0, avgLen: moves / cnt, blackWinRate: bw / cnt };
+}
+function search(msg) {
+  if (msg.bench) return rawBench(msg);
+  const t0 = Date.now();
+  setup(msg.N); if (msg.seed) seed = (msg.seed >>> 0) || 2463534242;
+  if (msg.opts) for (const k in msg.opts) P[k] = msg.opts[k];
+  LGRT = new Int16Array(2 * (NN + 1)).fill(-1);
+  const root = new State(); for (let i = 0; i < NN; i++) root.b[i] = msg.board[i]; root.last = msg.last; root.passes = msg.passes; root.ko = -1; root.rebuild();
+  const toMove = msg.turn, komi = msg.komi;
+  const rootMoves = new Set(msg.rootMoves);
+  const rootNode = new Node(PASS, 3 - toMove, null, 0);
+  expand(rootNode, root, toMove, msg.moveNo, rootMoves, msg.allowPass);
+  if (!rootNode.kids.length) return { id: msg.id, ranked: [], playouts: 0, ms: 0, value: 0 };
+  const s = new State(), amafStamp = new Int32Array(2 * (NN + 1)), amafIdx = new Int32Array(2 * (NN + 1));
+  const seqM = new Int16Array(NN * 4 + 8), seqC = new Int8Array(NN * 4 + 8);
+  let playouts = 0; const maxP = msg.maxPlayouts || 1e9, maxMs = msg.ms || 1500;
+  for (let it = 1; ; it++) {
+    if ((it & 31) === 0 && (Date.now() - t0 >= maxMs)) break;
+    if (it > maxP) break;
+    s.copy(root); let node = rootNode, depth = 0, c = toMove; const path = [rootNode];
+    // selection
+    while (node.kids !== null && node.kids.length && s.passes < 2) {
+      const lnN = Math.log(node.n + 2), fpu = node.n > 0 ? 1 - node.w / node.n - 0.04 : 0.46; let best = null, bv = -1e9;
+      for (let i = 0; i < node.kids.length; i++) {
+        const k = node.kids[i]; if (k.dead) continue;
+        const q = k.n > 0 ? k.w / k.n : fpu;
+        let v;
+        if (k.rn > 0) { const beta = Math.sqrt(P.K / (3 * k.n + P.K)); v = (1 - beta) * q + beta * (k.rw / k.rn); } else v = q;
+        v += P.C * Math.sqrt(lnN / (k.n + 1)) + P.BIAS * k.prior / (k.n + 1);
+        if (v > bv) { bv = v; best = k; }
+      }
+      if (!best) break;
+      if (best.move === PASS) s.pass(); else if (!s.play(best.move, best.player)) { best.dead = true; continue; }
+      seqM[depth] = best.move; seqC[depth] = best.player; depth++;
+      node = best; path.push(node); c = 3 - best.player;
+    }
+    // expansion
+    if (s.passes < 2 && node.kids === null && node.n >= P.EXPAND) expand(node, s, c, msg.moveNo, null, s.n > 6 || msg.passes > 0);
+    // playout
+    let len = depth; const cap = NN * 2 + s.n;
+    while (s.passes < 2 && s.n < cap) {
+      const p = s.pick(c);
+      if (p < 0) s.pass(); else if (!s.play(p, c)) s.pass();
+      if (len < seqM.length) { seqM[len] = p < 0 ? PASS : p; seqC[len] = c; len++; }
+      c = 3 - c;
+    }
+    const blackWins = areaMargin(s.b) - komi > 0 ? 1 : 0;
+    if (P.LGR) {                                                              // remember the winner's replies, forget the loser's
+      const winner = blackWins ? BLACK : WHITE;
+      for (let i = Math.max(1, depth); i < len; i++) {
+        const prev = seqM[i - 1] < 0 ? NN : seqM[i - 1];
+        if (seqM[i] < 0 || prev === NN) continue;
+        const idx = (seqC[i] - 1) * (NN + 1) + prev;
+        if (seqC[i] === winner) LGRT[idx] = seqM[i]; else if (LGRT[idx] === seqM[i]) LGRT[idx] = -1;
+      }
+    }
+    // AMAF first-occurrence table
+    for (let i = len - 1; i >= 0; i--) { const idx = (seqC[i] - 1) * (NN + 1) + (seqM[i] < 0 ? NN : seqM[i]); amafStamp[idx] = it; amafIdx[idx] = i; }
+    // backpropagation
+    for (let d = path.length - 1; d >= 0; d--) {
+      const nd = path[d], win = nd.player === BLACK ? blackWins : 1 - blackWins;
+      nd.n++; nd.w += win;
+      if (nd.kids) for (let i = 0; i < nd.kids.length; i++) {
+        const k = nd.kids[i], idx = (k.player - 1) * (NN + 1) + (k.move < 0 ? NN : k.move);
+        if (amafStamp[idx] === it && amafIdx[idx] >= d) { k.rn++; k.rw += k.player === BLACK ? blackWins : 1 - blackWins; }
+      }
+    }
+    playouts++;
+  }
+  const ranked = rootNode.kids.filter(k => !k.dead).sort((a, b) => b.n - a.n).map(k => ({ move: k.move, n: k.n, wr: k.n ? k.w / k.n : 0 }));
+  return { id: msg.id, ranked, playouts, ms: Date.now() - t0, value: ranked.length ? ranked[0].wr : 0.5 };
+}
+
+if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof window === 'undefined') {
+  self.onmessage = e => { try { self.postMessage(search(e.data)); } catch (err) { self.postMessage({ id: e.data.id, error: String(err && err.stack || err) }); } };
+}
+
+<!--MCTS-END-->
 </script>
 </body>
 </html>
