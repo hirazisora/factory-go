@@ -411,6 +411,7 @@ function group(b, i) {
 // (The "closed vents" delay is purely visual, so a capturing move is legal even at a suicide point.)
 function tryMove(b, i, c) {
   if (b[i] !== 0) return { ok:false, reason:'occupied' };
+  if (b === board && stackPts.get(i) === c) return { ok:false, reason:'stack' };      // the large stack of a 大型工場 stands on its own eye: its owner may not build there either
   const nb = b.slice(); nb[i] = c;
   const e = 3 - c, done = new Set(), groups = [];
   for (const q of nbr[i]) {
@@ -1914,6 +1915,7 @@ function hintHTML(now) {
       if (hoverInfo.captured.length) return `<span class="good">${coord(hover)}：相手の排気口を塞ぎ <b>${hoverInfo.captured.length}</b> 基を爆破できる！</span><br>相手工場爆破後に排気口が確保されるため建設可能${tapNote}`;
       return `${coord(hover)} に工場を建設できる。${tapNote}`;
     }
+    if (hoverInfo.reason === 'stack') return '<span class="bad">建設不可。煙突を潰すと大工場ではなくなってしまう。</span><br>（煙突もポイントに加算されるので工場は建てなくても大丈夫！）';
     if (hoverInfo.reason === 'suicide') return '<span class="bad">建設不可：排気口が確保できない場所には建設できない（相手の工場を爆破できる場合は除く）</span>';
     if (hoverInfo.reason === 'ko') return '<span class="bad">着手禁止（コウ）：直前と同じ盤面に戻ってしまう。</span>';
   }
