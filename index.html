@@ -207,8 +207,13 @@ body.demo #banner .bnbtns{display:none}
 .nt-link{display:block;padding:12px 10px;border-radius:10px;border:2px solid var(--brass);background:rgba(246,220,138,.1);color:var(--brass-hi);font-weight:700;font-size:17px;word-break:break-all;text-decoration:none;box-shadow:0 0 18px rgba(255,170,60,.25)}
 .nt-link:hover{background:rgba(246,220,138,.2);text-decoration:underline}
 .nt-play{background:linear-gradient(#5b4a33,#3a2d1d 55%,#2a2014);color:#e6d3a0;border-color:#1b120b;padding:11px 10px;font-size:15px}
-h1 .demoTag{font-size:.55em;margin-left:.12em;letter-spacing:0}
-.tbTitle .demoTag{display:block;font-size:12px;line-height:1.1;letter-spacing:.2em;color:#cdb98a;text-shadow:none}      /* phone top bar: a small line under the title */
+/* under the title: (デモ版) and a link to the official version */
+.demoLine{display:flex;align-items:baseline;justify-content:center;gap:10px;margin-top:2px;font-family:'Shippori Mincho',serif;letter-spacing:.06em;text-shadow:none;line-height:1.2}
+.demoTag{font-size:13px;color:#cdb98a}
+.demoLink{font-size:13px;font-weight:700;color:var(--brass-hi);text-decoration:underline;text-underline-offset:3px}
+.demoLink:hover{color:#fff1c0}
+.tbTitle .demoLine{justify-content:flex-start;gap:8px}
+.tbTitle .demoTag,.tbTitle .demoLink{font-size:12px}
 .rm-head{display:flex;align-items:baseline;justify-content:space-between;padding-right:34px}
 .rm-title{font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:20px;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510}
 .rm-count{font-size:14px;color:#cdb98a}
@@ -271,7 +276,7 @@ h1 .demoTag{font-size:.55em;margin-left:.12em;letter-spacing:0}
 <div id="app">
   <div id="topbar">
     <div class="tbLeft">
-      <span class="tbTitle">ファクトリ囲碁<span class="demoTag">(デモ版)</span></span>
+      <span class="tbTitle">ファクトリ囲碁<span class="demoLine"><span class="demoTag">(デモ版)</span><a class="demoLink" href="https://hirazi.itch.io/factory-go" target="_blank" rel="noopener noreferrer">正式版はこちら！</a></span></span>
     </div>
     <div class="tbScore">
       <div class="tbCell c1 f1" id="tbC1"><small>黒の工場</small><div class="row"><span class="dial" id="tbDial1"></span><em>基</em></div></div>
@@ -296,7 +301,7 @@ h1 .demoTag{font-size:.55em;margin-left:.12em;letter-spacing:0}
 
   <aside id="panel">
     <div class="plate p-title">
-      <h1>ファクトリ囲碁<span class="demoTag">(デモ版)</span></h1>
+      <h1>ファクトリ囲碁<span class="demoLine"><span class="demoTag">(デモ版)</span><a class="demoLink" href="https://hirazi.itch.io/factory-go" target="_blank" rel="noopener noreferrer">正式版はこちら！</a></span></h1>
       <div class="sub">FACTORY-GO</div>
     </div>
 
