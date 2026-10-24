@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>ファクトリ囲碁 — FACTORY-GO</title>
+<title>ファクトリ囲碁(デモ版)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Shippori+Mincho:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -201,6 +201,14 @@ body.demo #banner .bnbtns{display:none}
   transform:translateY(12px) scale(.97);transition:transform .25s;
 }
 .rm.open .rm-card{transform:none}
+/* the opening notice (demo -> official version) */
+.nt-card{width:min(100%,480px);text-align:center;gap:14px;padding:24px 22px 20px}
+.nt-text{min-height:0;font-size:18px}
+.nt-link{display:block;padding:12px 10px;border-radius:10px;border:2px solid var(--brass);background:rgba(246,220,138,.1);color:var(--brass-hi);font-weight:700;font-size:17px;word-break:break-all;text-decoration:none;box-shadow:0 0 18px rgba(255,170,60,.25)}
+.nt-link:hover{background:rgba(246,220,138,.2);text-decoration:underline}
+.nt-play{background:linear-gradient(#5b4a33,#3a2d1d 55%,#2a2014);color:#e6d3a0;border-color:#1b120b;padding:11px 10px;font-size:15px}
+h1 .demoTag{font-size:.55em;margin-left:.12em;letter-spacing:0}
+.tbTitle .demoTag{display:block;font-size:12px;line-height:1.1;letter-spacing:.2em;color:#cdb98a;text-shadow:none}      /* phone top bar: a small line under the title */
 .rm-head{display:flex;align-items:baseline;justify-content:space-between;padding-right:34px}
 .rm-title{font-family:'Cinzel Decorative','Shippori Mincho',serif;font-size:20px;color:var(--brass-hi);text-shadow:0 2px 0 #4d3510}
 .rm-count{font-size:14px;color:#cdb98a}
@@ -263,7 +271,7 @@ body.demo #banner .bnbtns{display:none}
 <div id="app">
   <div id="topbar">
     <div class="tbLeft">
-      <span class="tbTitle">ファクトリ囲碁</span>
+      <span class="tbTitle">ファクトリ囲碁<span class="demoTag">(デモ版)</span></span>
     </div>
     <div class="tbScore">
       <div class="tbCell c1 f1" id="tbC1"><small>黒の工場</small><div class="row"><span class="dial" id="tbDial1"></span><em>基</em></div></div>
@@ -288,7 +296,7 @@ body.demo #banner .bnbtns{display:none}
 
   <aside id="panel">
     <div class="plate p-title">
-      <h1>ファクトリ囲碁</h1>
+      <h1>ファクトリ囲碁<span class="demoTag">(デモ版)</span></h1>
       <div class="sub">FACTORY-GO</div>
     </div>
 
@@ -366,6 +374,15 @@ body.demo #banner .bnbtns{display:none}
 ・置かれた石の数を競います。（地には終局時に自動で石が置かれます）
 ・「死に石」の判定は有りません。死んでいる石も取り切る必要があります。
 ・いわゆる中国ルールのため、コミは7.5目です</div>
+    </div>
+  </div>
+  <!-- shown when the page opens: this is the demo; the official version is on itch.io -->
+  <div id="noticeModal" class="rm" aria-hidden="true" role="dialog" aria-labelledby="ntText">
+    <div class="rm-card nt-card">
+      <div class="rm-text nt-text" id="ntText">このページはデモ版です。
+オンライン対戦なども楽しめる正式版はこちら</div>
+      <a class="nt-link" href="https://hirazi.itch.io/factory-go" target="_blank" rel="noopener noreferrer">https://hirazi.itch.io/factory-go</a>
+      <button class="btn nt-play" id="ntPlay">とりあえずデモ版で遊ぶ</button>
     </div>
   </div>
 </div>
@@ -2151,6 +2168,12 @@ const RULE_SLIDES = [
   const dfm = $('#diffModal'), dfOpen = () => { dfm.classList.add('open'); dfm.setAttribute('aria-hidden', 'false'); }, dfClose = () => { dfm.classList.remove('open'); dfm.setAttribute('aria-hidden', 'true'); };
   $('#btnDiff').onclick = dfOpen; $('#btnDiffStart').onclick = dfOpen; $('#dfClose').onclick = dfClose;
   dfm.addEventListener('click', e => { if (e.target === dfm) dfClose(); });
+  // the opening notice: closed by「とりあえずデモ版で遊ぶ」, a click outside it or Esc (not shown inside the rules' demo clips)
+  const ntm = $('#noticeModal'), ntClose = () => { ntm.classList.remove('open'); ntm.setAttribute('aria-hidden', 'true'); };
+  $('#ntPlay').onclick = ntClose;
+  ntm.addEventListener('click', e => { if (e.target === ntm) ntClose(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ntm.classList.contains('open')) ntClose(); });
+  if (!DEMO) { ntm.classList.add('open'); ntm.setAttribute('aria-hidden', 'false'); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && dfm.classList.contains('open')) dfClose(); }); $('#rmClose').onclick = close; $('#rmNext').onclick = next; $('#rmPrev').onclick = prev;
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
   document.addEventListener('keydown', e => {
